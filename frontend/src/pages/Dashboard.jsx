@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Plus, Clock, CheckCircle, AlertCircle, ArrowRight, Zap, Target, TrendingUp } from 'lucide-react';
+import { Plus, Clock, CheckCircle, AlertCircle, ArrowRight, Zap, Target, TrendingUp, Fish, Wifi, WifiOff } from 'lucide-react';
 
 const statusConfig = {
   pending: { icon: Clock, color: 'text-yellow-600 bg-yellow-50', label: 'Pending' },
@@ -13,12 +13,18 @@ const statusConfig = {
 export default function Dashboard() {
   const [simulations, setSimulations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [health, setHealth] = useState(null);
 
   useEffect(() => {
     api.listSimulations()
       .then(setSimulations)
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // Check engine status
+    api.healthCheck()
+      .then(setHealth)
+      .catch(() => setHealth(null));
   }, []);
 
   const completedSims = simulations.filter(s => s.status === 'completed');
@@ -39,6 +45,32 @@ export default function Dashboard() {
           New Simulation
         </Link>
       </div>
+
+      {/* MiroFish Engine Status */}
+      {health && (
+        <div className={`mb-6 p-4 rounded-xl border ${health.mirofish_available ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div className="flex items-center gap-3">
+            <Fish className={`h-5 w-5 ${health.mirofish_available ? 'text-emerald-600' : 'text-amber-600'}`} />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">
+                  {health.mirofish_available ? 'MiroFish Swarm Engine Connected' : 'MiroFish Unavailable — Using Fallback Engine'}
+                </span>
+                {health.mirofish_available
+                  ? <Wifi className="h-3.5 w-3.5 text-emerald-600" />
+                  : <WifiOff className="h-3.5 w-3.5 text-amber-600" />
+                }
+              </div>
+              <p className="text-xs text-gray-600 mt-0.5">
+                {health.mirofish_available
+                  ? `Swarm simulation active — ${health.models_configured} LLM models configured`
+                  : `Simulations will use direct LLM calls instead of swarm intelligence. Connect MiroFish for richer results.`
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

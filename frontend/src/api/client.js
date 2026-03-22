@@ -118,6 +118,19 @@ class ApiClient {
   async getSupportedIndustries() {
     return this.request('/committee/industries');
   }
+
+  // Health & Engine Status
+  async healthCheck() {
+    return this.request('/health');
+  }
+
+  async getModelStats() {
+    return this.request('/models/stats');
+  }
+
+  async getModelPool() {
+    return this.request('/models/pool');
+  }
 }
 
 export const api = new ApiClient();

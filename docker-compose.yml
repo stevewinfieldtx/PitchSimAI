@@ -8,7 +8,6 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/pitchsim
       - DATABASE_URL_SYNC=postgresql://postgres:postgres@db:5432/pitchsim
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       - OPENROUTER_DEFAULT_MODEL=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
@@ -19,12 +18,39 @@ services:
       - OPENROUTER_MODEL5_ID=${OPENROUTER_MODEL5_ID:-}
       - OPENROUTER_CONCURRENCY_PER_MODEL=${OPENROUTER_CONCURRENCY_PER_MODEL:-10}
       - REDIS_URL=redis://redis:6379/0
+      - MIROFISH_API_URL=http://mirofish:5001
+      - MIROFISH_NUM_AGENTS=${MIROFISH_NUM_AGENTS:-50}
+      - MIROFISH_NUM_ROUNDS=${MIROFISH_NUM_ROUNDS:-20}
       - DEBUG=${DEBUG:-false}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
+      mirofish:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── MiroFish: Swarm Intelligence Simulation Engine ──
+  # Spawns thousands of autonomous AI agents that simulate buyer behavior.
+  # PitchSimAI sends pitches to MiroFish via REST API (port 5001).
+  # See: https://github.com/666ghj/MiroFish
+  mirofish:
+    build:
+      context: ./mirofish
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - LLM_API_KEY=${OPENROUTER_API_KEY:-}
+      - LLM_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - LLM_MODEL_NAME=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - ZEP_API_KEY=${ZEP_API_KEY:-}
+      - BOOST_LLM_API_KEY=${OPENROUTER_API_KEY:-}
+      - BOOST_LLM_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - BOOST_LLM_MODEL_NAME=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+    volumes:
+      - mirofish_data:/app/backend/uploads
     restart: unless-stopped
 
   frontend:
@@ -60,3 +86,4 @@ services:
 
 volumes:
   pgdata:
+  mirofish_data:

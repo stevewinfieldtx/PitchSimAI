@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Zap, ArrowLeft, ArrowRight, Send } from 'lucide-react';
+import { Zap, ArrowLeft, ArrowRight, Send, Fish, Settings2 } from 'lucide-react';
 
 const INDUSTRIES = ['SaaS', 'Financial Services', 'Healthcare', 'Retail', 'Manufacturing'];
 const COMPANY_SIZES = ['early-stage', 'mid-market', 'enterprise'];
@@ -12,6 +12,13 @@ export default function NewSimulation() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [mirofishAvailable, setMirofishAvailable] = useState(false);
+
+  useEffect(() => {
+    api.healthCheck()
+      .then(h => setMirofishAvailable(h.mirofish_available))
+      .catch(() => setMirofishAvailable(false));
+  }, []);
 
   const [form, setForm] = useState({
     pitch_title: '',
@@ -20,6 +27,9 @@ export default function NewSimulation() {
     industry: '',
     target_audience: '',
     num_personas: 10,
+    num_agents: 50,
+    num_rounds: 20,
+    use_mirofish: true,
     persona_filters: {
       industries: [],
       company_sizes: [],
@@ -44,7 +54,15 @@ export default function NewSimulation() {
     setError('');
     setLoading(true);
     try {
-      const result = await api.createSimulation(form);
+      const payload = {
+        ...form,
+        config: {
+          use_mirofish: form.use_mirofish,
+          num_agents: form.num_agents,
+          num_rounds: form.num_rounds,
+        },
+      };
+      const result = await api.createSimulation(payload);
       navigate(`/simulation/${result.id}`);
     } catch (err) {
       setError(err.message);
@@ -235,6 +253,73 @@ export default function NewSimulation() {
             </div>
           </div>
 
+          {/* MiroFish Swarm Configuration */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Fish className="h-5 w-5 text-primary-600" />
+              <h3 className="font-semibold">Simulation Engine</h3>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.use_mirofish}
+                  onChange={(e) => setForm({ ...form, use_mirofish: e.target.checked })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium">
+                  Use MiroFish Swarm Intelligence
+                  {mirofishAvailable
+                    ? <span className="ml-2 text-xs text-emerald-600">(Connected)</span>
+                    : <span className="ml-2 text-xs text-amber-600">(Will use fallback if unavailable)</span>
+                  }
+                </span>
+              </label>
+            </div>
+
+            {form.use_mirofish && (
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    AI Agents ({form.num_agents})
+                  </label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="200"
+                    step="10"
+                    value={form.num_agents}
+                    onChange={(e) => setForm({ ...form, num_agents: parseInt(e.target.value) })}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>10</span><span>200</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Autonomous buyer agents in the swarm</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Simulation Rounds ({form.num_rounds})
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="50"
+                    step="5"
+                    value={form.num_rounds}
+                    onChange={(e) => setForm({ ...form, num_rounds: parseInt(e.target.value) })}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>5</span><span>50</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Interaction rounds (more = deeper dynamics)</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-between">
             <button onClick={() => setStep(2)} className="text-gray-500 hover:text-gray-700 text-sm">Back</button>
             <button
@@ -242,8 +327,8 @@ export default function NewSimulation() {
               disabled={loading}
               className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition disabled:opacity-50 shadow-sm"
             >
-              <Send className="h-4 w-4" />
-              {loading ? 'Launching...' : 'Launch Simulation'}
+              {form.use_mirofish ? <Fish className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+              {loading ? 'Launching...' : form.use_mirofish ? 'Launch Swarm Simulation' : 'Launch Simulation'}
             </button>
           </div>
         </div>

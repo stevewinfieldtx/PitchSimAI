@@ -9,11 +9,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pitchsim"
     database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/pitchsim"
 
-    # Auth
-    secret_key: str = "change-me-in-production-use-a-real-secret"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 1440  # 24 hours
-
     # LLM via OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -35,8 +30,14 @@ class Settings(BaseSettings):
     # Redis (for Celery task queue)
     redis_url: str = "redis://localhost:6379/0"
 
-    # MiroFish
-    mirofish_api_url: str = "http://localhost:8080"
+    # MiroFish — Swarm Intelligence Simulation Engine
+    # This is the core simulation backend. PitchSimAI sends pitches to MiroFish,
+    # which spawns thousands of autonomous AI buyer agents that interact and
+    # produce realistic buying committee dynamics.
+    mirofish_api_url: str = "http://localhost:5001"
+    mirofish_num_agents: int = 50       # Default agents per simulation
+    mirofish_num_rounds: int = 20       # Default interaction rounds
+    mirofish_timeout: float = 300.0     # Max wait per API call (seconds)
 
     # Simulation defaults
     default_num_personas: int = 10

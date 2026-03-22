@@ -44,11 +44,19 @@ app.include_router(committee.router, prefix="/api/committee", tags=["Buying Comm
 @app.get("/api/health")
 async def health_check():
     from services.model_pool import get_model_pool
+    from services.mirofish import get_mirofish_client
+
     pool = get_model_pool()
+    mf_client = get_mirofish_client()
+    mf_healthy = await mf_client.health_check()
+
     return {
         "status": "healthy",
         "app": settings.app_name,
-        "version": "0.1.0",
+        "version": "0.2.0",
+        "engine": "mirofish" if mf_healthy else "model_pool_fallback",
+        "mirofish_available": mf_healthy,
+        "mirofish_url": settings.mirofish_api_url,
         "models_configured": len(pool.models),
         "model_ids": list(pool.models.keys()),
     }

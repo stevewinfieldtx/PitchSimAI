@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import asyncio
 from datetime import datetime
@@ -11,8 +12,256 @@ from config import get_settings
 from database import async_session
 from models import Simulation, Persona, SimulationResult, PersonaResponse
 from services.model_pool import get_model_pool
+from services.mirofish import (
+    get_mirofish_orchestrator,
+    get_mirofish_client,
+    SimulationStatus,
+)
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────
+# MiroFish-Powered Simulation (Primary Engine)
+# ──────────────────────────────────────────────
+
+
+async def run_mirofish_simulation(
+    simulation_id: str,
+    pitch_content: str,
+    personas: Optional[List[Dict[str, Any]]] = None,
+    num_agents: int = 50,
+    num_rounds: int = 20,
+):
+    """
+    Run a pitch simulation using MiroFish's swarm intelligence engine.
+
+    This is the PRIMARY simulation method. MiroFish spawns autonomous AI agents
+    that interact with each other in a social simulation, producing far richer
+    and more realistic buyer behavior than individual LLM calls.
+
+    Falls back to the legacy model_pool approach if MiroFish is unavailable.
+    """
+    orchestrator = get_mirofish_orchestrator()
+    client = get_mirofish_client()
+
+    async with async_session() as db:
+        try:
+            # Check MiroFish availability
+            mirofish_available = await client.health_check()
+
+            if not mirofish_available:
+                logger.warning(
+                    "MiroFish not available — falling back to model pool simulation"
+                )
+                # Fall back to legacy simulation
+                persona_ids = None
+                if personas:
+                    # Try to find matching personas in DB
+                    persona_ids = [str(p["id"]) for p in personas if "id" in p]
+                await run_simulation(
+                    simulation_id, pitch_content,
+                    num_personas=num_agents,
+                    persona_ids=persona_ids or None,
+                )
+                return
+
+            # Update simulation status
+            result = await db.execute(
+                select(Simulation).where(Simulation.id == UUID(simulation_id))
+            )
+            sim = result.scalar_one()
+            sim.status = "running"
+            sim.started_at = datetime.utcnow()
+            sim.config = {
+                **(sim.config or {}),
+                "engine": "mirofish",
+                "num_agents": num_agents,
+                "num_rounds": num_rounds,
+            }
+            await db.commit()
+
+            # Status callback to update progress in DB
+            async def update_progress(status: str, detail: str = ""):
+                async with async_session() as progress_db:
+                    r = await progress_db.execute(
+                        select(Simulation).where(Simulation.id == UUID(simulation_id))
+                    )
+                    s = r.scalar_one()
+                    status_to_pct = {
+                        SimulationStatus.GRAPH_BUILDING.value: 15,
+                        SimulationStatus.PREPARING_AGENTS.value: 30,
+                        SimulationStatus.RUNNING.value: 60,
+                        SimulationStatus.GENERATING_REPORT.value: 85,
+                        SimulationStatus.COMPLETED.value: 100,
+                    }
+                    s.progress_pct = status_to_pct.get(status, s.progress_pct)
+                    s.config = {
+                        **(s.config or {}),
+                        "mirofish_status": status,
+                        "mirofish_detail": detail,
+                    }
+                    await progress_db.commit()
+
+            # Run the full MiroFish pipeline
+            mf_result = await orchestrator.run_pitch_simulation(
+                pitch_text=pitch_content,
+                prediction_goal=(
+                    f"Predict how a buying committee in {sim.industry or 'technology'} "
+                    f"would react to this {sim.company_name or 'product'} pitch. "
+                    f"Target audience: {sim.target_audience or 'business decision makers'}."
+                ),
+                personas=personas,
+                num_agents=num_agents,
+                num_rounds=num_rounds,
+                status_callback=update_progress,
+            )
+
+            if mf_result.get("status") == SimulationStatus.FAILED.value:
+                raise RuntimeError(
+                    f"MiroFish simulation failed: {mf_result.get('error', 'Unknown error')}"
+                )
+
+            # Store MiroFish results in our database
+            scores = mf_result.get("scores", {})
+
+            sim_result = SimulationResult(
+                simulation_id=UUID(simulation_id),
+                overall_engagement_score=scores.get("engagement_score", 0),
+                overall_sentiment_score=scores.get("sentiment_score", 0),
+                sentiment_breakdown={
+                    "positive": scores.get("champion_count", 0),
+                    "negative": scores.get("objection_count", 0),
+                    "total_interactions": scores.get("total_interactions", 0),
+                },
+                key_objections=scores.get("top_objections", []),
+                objection_frequency={"total": scores.get("objection_count", 0)},
+                key_recommendations=[],  # Will be populated from report
+                strongest_segments=[],
+                weakest_segments=[],
+                engagement_by_industry={sim.industry or "general": scores.get("engagement_score", 0)},
+                next_steps_suggested="",
+            )
+
+            # Extract recommendations from MiroFish report
+            report = mf_result.get("report", {})
+            if report:
+                sim_result.key_recommendations = _extract_recommendations_from_report(report)
+                sim_result.next_steps_suggested = _extract_next_steps_from_report(report)
+
+            db.add(sim_result)
+
+            # Store MiroFish IDs for later chat/interaction
+            r2 = await db.execute(
+                select(Simulation).where(Simulation.id == UUID(simulation_id))
+            )
+            sim = r2.scalar_one()
+            sim.config = {
+                **(sim.config or {}),
+                "engine": "mirofish",
+                "mirofish_project_id": mf_result.get("project_id"),
+                "mirofish_simulation_id": mf_result.get("simulation_id"),
+                "mirofish_report_id": mf_result.get("report_id"),
+                "mirofish_scores": scores,
+                "deal_probability": scores.get("deal_probability", 0),
+            }
+            sim.status = "completed"
+            sim.completed_at = datetime.utcnow()
+            sim.progress_pct = 100
+            await db.commit()
+
+            logger.info(
+                f"MiroFish simulation {simulation_id} completed — "
+                f"deal probability: {scores.get('deal_probability', 0)}%"
+            )
+
+        except Exception as e:
+            logger.error(f"MiroFish simulation {simulation_id} failed: {e}", exc_info=True)
+            async with async_session() as error_db:
+                r = await error_db.execute(
+                    select(Simulation).where(Simulation.id == UUID(simulation_id))
+                )
+                sim = r.scalar_one()
+                sim.status = "failed"
+                sim.completed_at = datetime.utcnow()
+                sim.config = {**(sim.config or {}), "error": str(e)}
+                await error_db.commit()
+
+
+def _extract_recommendations_from_report(report: Dict[str, Any]) -> List[str]:
+    """Pull actionable recommendations from MiroFish's report agent output."""
+    recommendations = []
+    logs = report.get("logs", report.get("data", []))
+    if isinstance(logs, list):
+        for entry in logs:
+            content = entry.get("content", "") if isinstance(entry, dict) else str(entry)
+            if any(kw in content.lower() for kw in ["recommend", "suggest", "improve", "consider"]):
+                # Extract the relevant sentence
+                for sentence in content.split(". "):
+                    if any(kw in sentence.lower() for kw in ["recommend", "suggest", "improve", "consider"]):
+                        recommendations.append(sentence.strip().rstrip(".") + ".")
+                        if len(recommendations) >= 5:
+                            break
+    return recommendations[:5] if recommendations else ["Review simulation report for detailed analysis."]
+
+
+def _extract_next_steps_from_report(report: Dict[str, Any]) -> str:
+    """Pull next steps summary from MiroFish report."""
+    logs = report.get("logs", report.get("data", []))
+    if isinstance(logs, list):
+        for entry in reversed(logs):
+            content = entry.get("content", "") if isinstance(entry, dict) else str(entry)
+            if "next" in content.lower() or "action" in content.lower():
+                return content[:500]
+    return "Review the full simulation report for detailed next steps and agent interactions."
+
+
+# ──────────────────────────────────────────────
+# MiroFish Agent Chat (Post-Simulation)
+# ──────────────────────────────────────────────
+
+
+async def chat_with_mirofish_agent(
+    simulation_config: Dict[str, Any],
+    agent_id: str,
+    message: str,
+) -> str:
+    """Chat with a simulated buyer agent via MiroFish's deep interaction feature."""
+    mf_sim_id = simulation_config.get("mirofish_simulation_id")
+    if not mf_sim_id:
+        return "This simulation was not run with MiroFish. Use the standard chat."
+
+    client = get_mirofish_client()
+    try:
+        result = await client.chat_with_agent(mf_sim_id, agent_id, message)
+        return result.get("response", result.get("content", str(result)))
+    except Exception as e:
+        logger.error(f"MiroFish agent chat failed: {e}")
+        return f"Unable to reach the simulated buyer right now. Error: {e}"
+
+
+async def chat_with_mirofish_analyst(
+    simulation_config: Dict[str, Any],
+    message: str,
+) -> str:
+    """Chat with MiroFish's ReportAgent for deal analysis."""
+    report_id = simulation_config.get("mirofish_report_id")
+    if not report_id:
+        return "No MiroFish report available for this simulation."
+
+    client = get_mirofish_client()
+    try:
+        result = await client.chat_with_report(report_id, message)
+        return result.get("response", result.get("content", str(result)))
+    except Exception as e:
+        logger.error(f"MiroFish analyst chat failed: {e}")
+        return f"Unable to reach the analyst right now. Error: {e}"
+
+
+# ──────────────────────────────────────────────
+# Legacy Model Pool Simulation (Fallback)
+# ──────────────────────────────────────────────
 
 
 def _is_high_value_persona(persona: Persona) -> bool:

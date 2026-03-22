@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db, async_session
 from models import Simulation, SimulationResult, PersonaResponse as PersonaResponseModel
 from schemas import SimulationCreate, SimulationResponse
-from services.simulation import run_simulation
+from services.simulation import run_simulation, run_mirofish_simulation
 
 router = APIRouter()
 
@@ -22,6 +22,7 @@ async def create_simulation(
     db: AsyncSession = Depends(get_db),
 ):
     num_personas = len(sim_data.persona_ids) if sim_data.persona_ids else sim_data.num_personas
+    use_mirofish = sim_data.config.get("use_mirofish", True) if sim_data.config else True
 
     sim = Simulation(
         pitch_title=sim_data.pitch_title,
@@ -37,14 +38,54 @@ async def create_simulation(
     await db.commit()
     await db.refresh(sim)
 
-    background_tasks.add_task(
-        run_simulation,
-        str(sim.id),
-        sim_data.pitch_content,
-        sim_data.persona_filters.model_dump() if sim_data.persona_filters else None,
-        sim_data.num_personas,
-        persona_ids=[str(pid) for pid in sim_data.persona_ids] if sim_data.persona_ids else None,
-    )
+    if use_mirofish:
+        # Primary: MiroFish swarm simulation (auto-falls back to model pool if unavailable)
+        num_agents = sim_data.config.get("num_agents", 50) if sim_data.config else 50
+        num_rounds = sim_data.config.get("num_rounds", 20) if sim_data.config else 20
+
+        # Convert persona_ids to persona dicts for MiroFish seeding
+        personas = None
+        if sim_data.persona_ids:
+            from sqlalchemy import select as sa_select
+            from models import Persona
+            persona_result = await db.execute(
+                sa_select(Persona).where(Persona.id.in_(sim_data.persona_ids))
+            )
+            db_personas = persona_result.scalars().all()
+            personas = [
+                {
+                    "id": str(p.id),
+                    "name": p.name,
+                    "title": p.title,
+                    "industry": p.industry,
+                    "company_size": p.company_size,
+                    "traits": list((p.personality_traits or {}).keys()),
+                    "pain_points": p.pain_points or [],
+                    "priorities": [],
+                    "background": p.bio or "",
+                    "communication_style": p.buying_style or "professional",
+                }
+                for p in db_personas
+            ]
+
+        background_tasks.add_task(
+            run_mirofish_simulation,
+            str(sim.id),
+            sim_data.pitch_content,
+            personas=personas,
+            num_agents=num_agents,
+            num_rounds=num_rounds,
+        )
+    else:
+        # Legacy: Direct model pool simulation
+        background_tasks.add_task(
+            run_simulation,
+            str(sim.id),
+            sim_data.pitch_content,
+            sim_data.persona_filters.model_dump() if sim_data.persona_filters else None,
+            sim_data.num_personas,
+            persona_ids=[str(pid) for pid in sim_data.persona_ids] if sim_data.persona_ids else None,
+        )
 
     return sim
 
