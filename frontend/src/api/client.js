@@ -121,7 +121,7 @@ class ApiClient {
 
   // Health & Engine Status
   async healthCheck() {
-    return this.request('/health');
+    return this.request('/health/full');
   }
 
   async getModelStats() {

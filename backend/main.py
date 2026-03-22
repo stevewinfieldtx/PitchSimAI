@@ -43,6 +43,25 @@ app.include_router(committee.router, prefix="/api/committee", tags=["Buying Comm
 
 @app.get("/api/health")
 async def health_check():
+    """
+    Health check endpoint. Must respond FAST — Railway uses this to determine
+    if the service is alive. MiroFish status is checked separately.
+    """
+    from services.model_pool import get_model_pool
+    pool = get_model_pool()
+
+    return {
+        "status": "healthy",
+        "app": settings.app_name,
+        "version": "0.2.0",
+        "models_configured": len(pool.models),
+        "model_ids": list(pool.models.keys()),
+    }
+
+
+@app.get("/api/health/full")
+async def health_check_full():
+    """Extended health check including MiroFish status (may take 2-3s)."""
     from services.model_pool import get_model_pool
     from services.mirofish import get_mirofish_client
 

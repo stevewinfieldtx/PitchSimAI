@@ -71,14 +71,19 @@ class MiroFishClient:
     # ──────────────────────────────────────────────
 
     async def health_check(self) -> bool:
-        """Check if MiroFish service is reachable."""
+        """Check if MiroFish service is reachable. Fast-fail with 2s timeout."""
         try:
-            client = await self._get_client()
-            resp = await client.get("/api/graph/data/test", timeout=5.0)
-            # Any response (even 404) means the service is up
-            return resp.status_code < 500
+            # Use a short-lived client with aggressive timeouts
+            # so we don't block Railway's health check endpoint
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(2.0, connect=2.0),
+            ) as quick_client:
+                resp = await quick_client.get("/api/graph/data/test")
+                # Any response (even 404) means the service is up
+                return resp.status_code < 500
         except Exception as e:
-            logger.warning(f"MiroFish health check failed: {e}")
+            logger.debug(f"MiroFish not available: {e}")
             return False
 
     # ──────────────────────────────────────────────
