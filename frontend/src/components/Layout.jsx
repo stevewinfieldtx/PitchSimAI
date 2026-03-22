@@ -1,0 +1,68 @@
+import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { LayoutDashboard, Plus, Users, LogOut, Zap } from 'lucide-react';
+
+export default function Layout() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+
+  const navItems = [
+    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/new', label: 'New Simulation', icon: Plus },
+    { path: '/committee', label: 'Buying Committee', icon: Users },
+    { path: '/personas', label: 'Persona Library', icon: Users },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary-600">
+                <Zap className="h-6 w-6" />
+                PitchSim AI
+              </Link>
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        active
+                          ? 'text-primary-600 bg-primary-50'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-500">{user?.name || user?.email}</span>
+              <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full font-medium">
+                {user?.subscription_tier || 'free'}
+              </span>
+              <button
+                onClick={logout}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

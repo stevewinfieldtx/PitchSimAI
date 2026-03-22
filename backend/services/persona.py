@@ -1,0 +1,187 @@
+import json
+from pathlib import Path
+from sqlalchemy import select, func
+from database import async_session
+from models import Persona
+
+
+async def seed_default_personas():
+    """Seed the database with default personas if empty."""
+    async with async_session() as db:
+        result = await db.execute(select(func.count(Persona.id)))
+        count = result.scalar()
+
+        if count > 0:
+            return
+
+        # Load from seed file or use defaults
+        seed_path = Path(__file__).parent.parent.parent / "seed" / "personas.json"
+
+        if seed_path.exists():
+            with open(seed_path) as f:
+                personas_data = json.load(f)
+        else:
+            personas_data = get_default_personas()
+
+        for p_data in personas_data:
+            persona = Persona(**p_data)
+            db.add(persona)
+
+        await db.commit()
+        print(f"Seeded {len(personas_data)} default personas")
+
+
+def get_default_personas():
+    """Built-in default personas."""
+    return [
+        {
+            "name": "Sarah Chen",
+            "title": "VP of Engineering",
+            "industry": "SaaS",
+            "company_size": "enterprise",
+            "personality_traits": {"skepticism": 0.7, "innovation_openness": 0.8, "detail_orientation": 0.9},
+            "buying_style": "consensus-builder",
+            "pain_points": ["Technical debt", "Team scaling", "Integration complexity"],
+            "objection_patterns": ["Show me the technical architecture", "What about security?", "How does this scale?"],
+            "decision_process": "committee-based",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "6-12 months", "key_metric": "developer productivity"},
+            "bio": "15 years in tech, previously at AWS and Stripe. Values technical rigor and scalable solutions. Won't consider anything without a thorough security review.",
+            "is_public": True,
+        },
+        {
+            "name": "Marcus Johnson",
+            "title": "Chief Revenue Officer",
+            "industry": "SaaS",
+            "company_size": "mid-market",
+            "personality_traits": {"skepticism": 0.4, "innovation_openness": 0.9, "detail_orientation": 0.5},
+            "buying_style": "early-adopter",
+            "pain_points": ["Revenue growth", "Sales cycle length", "Pipeline visibility"],
+            "objection_patterns": ["What's the ROI?", "How fast can we see results?", "Who else is using this?"],
+            "decision_process": "single-stakeholder",
+            "budget_authority": "full",
+            "success_criteria": {"roi_timeline": "3-6 months", "key_metric": "revenue growth"},
+            "bio": "Serial entrepreneur turned CRO. Moves fast and values speed to value over perfection. Will champion tools that clearly impact revenue.",
+            "is_public": True,
+        },
+        {
+            "name": "Dr. Priya Patel",
+            "title": "CISO",
+            "industry": "Financial Services",
+            "company_size": "enterprise",
+            "personality_traits": {"skepticism": 0.9, "innovation_openness": 0.4, "detail_orientation": 0.95},
+            "buying_style": "risk-averse",
+            "pain_points": ["Regulatory compliance", "Data breaches", "Vendor risk management"],
+            "objection_patterns": ["SOC 2 compliance?", "Data residency?", "Penetration test results?"],
+            "decision_process": "committee-based",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "12+ months", "key_metric": "risk reduction"},
+            "bio": "Former cybersecurity consultant at Deloitte. Extremely thorough in vendor evaluation. Needs extensive compliance documentation before considering any solution.",
+            "is_public": True,
+        },
+        {
+            "name": "Tom Williams",
+            "title": "Director of Product",
+            "industry": "Healthcare",
+            "company_size": "mid-market",
+            "personality_traits": {"skepticism": 0.6, "innovation_openness": 0.7, "detail_orientation": 0.8},
+            "buying_style": "analytical",
+            "pain_points": ["Patient experience", "HIPAA compliance", "Legacy system integration"],
+            "objection_patterns": ["Is this HIPAA compliant?", "Integration with our EMR?", "What about patient data?"],
+            "decision_process": "committee-based",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "6-12 months", "key_metric": "patient satisfaction"},
+            "bio": "Product leader focused on digital health transformation. Balances innovation with strict regulatory requirements. Values vendors who understand healthcare's unique challenges.",
+            "is_public": True,
+        },
+        {
+            "name": "Jennifer Martinez",
+            "title": "VP of Marketing",
+            "industry": "Retail",
+            "company_size": "enterprise",
+            "personality_traits": {"skepticism": 0.3, "innovation_openness": 0.85, "detail_orientation": 0.6},
+            "buying_style": "early-adopter",
+            "pain_points": ["Customer acquisition cost", "Brand differentiation", "Omnichannel strategy"],
+            "objection_patterns": ["How does this impact our brand?", "Show me the analytics", "Customer case studies?"],
+            "decision_process": "single-stakeholder",
+            "budget_authority": "full",
+            "success_criteria": {"roi_timeline": "3-6 months", "key_metric": "customer acquisition cost"},
+            "bio": "Creative marketing executive who loves testing new channels and tools. Quick decision maker but needs to see clear performance data. Built her career on being an early adopter of winning strategies.",
+            "is_public": True,
+        },
+        {
+            "name": "Robert Kim",
+            "title": "CFO",
+            "industry": "Manufacturing",
+            "company_size": "enterprise",
+            "personality_traits": {"skepticism": 0.85, "innovation_openness": 0.3, "detail_orientation": 0.95},
+            "buying_style": "risk-averse",
+            "pain_points": ["Cost optimization", "Supply chain efficiency", "Capital allocation"],
+            "objection_patterns": ["Total cost of ownership?", "Payback period?", "Hidden fees?"],
+            "decision_process": "committee-based",
+            "budget_authority": "full",
+            "success_criteria": {"roi_timeline": "12-18 months", "key_metric": "cost savings"},
+            "bio": "30 years in manufacturing finance. Every dollar must be justified. Extremely resistant to new spending without rock-solid ROI projections and references from similar companies.",
+            "is_public": True,
+        },
+        {
+            "name": "Alex Rivera",
+            "title": "Head of DevOps",
+            "industry": "SaaS",
+            "company_size": "early-stage",
+            "personality_traits": {"skepticism": 0.5, "innovation_openness": 0.9, "detail_orientation": 0.7},
+            "buying_style": "early-adopter",
+            "pain_points": ["Deployment frequency", "System reliability", "Tool sprawl"],
+            "objection_patterns": ["Open source alternative?", "API documentation?", "Self-hosted option?"],
+            "decision_process": "single-stakeholder",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "1-3 months", "key_metric": "deployment velocity"},
+            "bio": "Startup veteran who's built infrastructure at three companies. Prefers open-source but will pay for tools that genuinely save time. Heavily influenced by developer community opinions.",
+            "is_public": True,
+        },
+        {
+            "name": "Diana Okonkwo",
+            "title": "Chief People Officer",
+            "industry": "Financial Services",
+            "company_size": "mid-market",
+            "personality_traits": {"skepticism": 0.5, "innovation_openness": 0.7, "detail_orientation": 0.7},
+            "buying_style": "consensus-builder",
+            "pain_points": ["Talent retention", "Employee engagement", "DEI initiatives"],
+            "objection_patterns": ["Employee adoption rate?", "Change management support?", "Data privacy for employees?"],
+            "decision_process": "committee-based",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "6-12 months", "key_metric": "employee satisfaction"},
+            "bio": "HR leader passionate about creating great workplaces. Evaluates tools through the lens of employee experience and adoption. Needs buy-in from multiple stakeholders before committing.",
+            "is_public": True,
+        },
+        {
+            "name": "Wei Zhang",
+            "title": "VP of Sales",
+            "industry": "SaaS",
+            "company_size": "mid-market",
+            "personality_traits": {"skepticism": 0.4, "innovation_openness": 0.8, "detail_orientation": 0.5},
+            "buying_style": "early-adopter",
+            "pain_points": ["Win rates", "Sales productivity", "Competitive deals"],
+            "objection_patterns": ["Proof of quota impact?", "Ramp time?", "CRM integration?"],
+            "decision_process": "single-stakeholder",
+            "budget_authority": "full",
+            "success_criteria": {"roi_timeline": "1-3 months", "key_metric": "win rate improvement"},
+            "bio": "Results-driven sales leader. Will invest in anything that helps the team close more deals faster. Makes decisions quickly based on peer recommendations and quick wins.",
+            "is_public": True,
+        },
+        {
+            "name": "Linda Nakamura",
+            "title": "Director of Operations",
+            "industry": "Healthcare",
+            "company_size": "enterprise",
+            "personality_traits": {"skepticism": 0.7, "innovation_openness": 0.5, "detail_orientation": 0.9},
+            "buying_style": "analytical",
+            "pain_points": ["Process efficiency", "Staff burnout", "Regulatory reporting"],
+            "objection_patterns": ["Workflow disruption?", "Training requirements?", "Compliance documentation?"],
+            "decision_process": "committee-based",
+            "budget_authority": "partial",
+            "success_criteria": {"roi_timeline": "6-12 months", "key_metric": "operational efficiency"},
+            "bio": "Operations leader focused on streamlining healthcare delivery. Values stability and proven solutions over cutting-edge technology. Needs comprehensive training and support plans before adopting new tools.",
+            "is_public": True,
+        },
+    ]
