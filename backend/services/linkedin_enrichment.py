@@ -17,7 +17,7 @@ from openai import AsyncOpenAI
 from config import get_settings
 
 settings = get_settings()
-client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) if settings.openai_api_key else None
+client = AsyncOpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url) if settings.openrouter_api_key else None
 
 
 async def enrich_from_linkedin_text(
@@ -29,7 +29,7 @@ async def enrich_from_linkedin_text(
     User copies the text content from a LinkedIn profile page and pastes it here.
     """
 
-    if not client or not settings.openai_api_key:
+    if not client or not settings.openrouter_api_key:
         return {"error": "OpenAI API key required for LinkedIn enrichment"}
 
     prompt = f"""Analyze this LinkedIn profile text and create a buyer persona for a sales simulation.
@@ -71,7 +71,7 @@ Respond with valid JSON:
 
     try:
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=settings.openrouter_default_model,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"},
@@ -92,7 +92,7 @@ async def enrich_from_name_and_company(
     Uses LLM's training data knowledge about the company and typical roles.
     """
 
-    if not client or not settings.openai_api_key:
+    if not client or not settings.openrouter_api_key:
         return {"error": "OpenAI API key required for enrichment"}
 
     prompt = f"""Create a realistic buyer persona for a sales simulation based on:
@@ -134,7 +134,7 @@ Respond with valid JSON:
 
     try:
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=settings.openrouter_default_model,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"},

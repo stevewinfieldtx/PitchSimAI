@@ -11,7 +11,7 @@ from database import async_session
 from models import Persona
 
 settings = get_settings()
-client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url) if settings.openai_api_key else None
+client = AsyncOpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url) if settings.openrouter_api_key else None
 
 
 # Typical buying committee roles by deal type
@@ -195,7 +195,7 @@ async def generate_buying_committee(
     warmth_profile = WARMTH_PROFILES[warmth_key]
 
     # If we have an LLM, use it for richer persona generation
-    if client and settings.openai_api_key:
+    if client and settings.openrouter_api_key:
         return await _llm_generate_committee(
             industry=industry,
             company_size=size_key,
@@ -290,7 +290,7 @@ Respond with valid JSON array:
 
     try:
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=settings.openrouter_default_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "Generate the buying committee now."},
@@ -474,7 +474,7 @@ async def generate_persona_from_context(
     No templates — every persona is unique to its context.
     """
 
-    if client and settings.openai_api_key:
+    if client and settings.openrouter_api_key:
         warmth_profile = WARMTH_PROFILES.get(warmth, WARMTH_PROFILES["mixed"])
 
         prompt = f"""Generate a single realistic buyer persona for a sales simulation based on:
@@ -507,7 +507,7 @@ Respond with valid JSON:
 
         try:
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=settings.openrouter_default_model,
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.9,
                 response_format={"type": "json_object"},

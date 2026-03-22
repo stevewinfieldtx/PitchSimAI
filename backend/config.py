@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
 
-    # LLM via OpenRouter (OpenAI-compatible)
-    openai_api_key: str = ""
-    openai_base_url: str = "https://openrouter.ai/api/v1"
-    openai_model: str = "openai/gpt-4o-mini"  # fallback default
+    # LLM via OpenRouter
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_default_model: str = "openai/gpt-4o-mini"
 
     # Multi-model pool — add as many as you want
     # Models are distributed across simulations round-robin

@@ -68,8 +68,8 @@ class ModelPool:
 
     def __init__(self):
         self.client = (
-            AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
-            if settings.openai_api_key else None
+            AsyncOpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url)
+            if settings.openrouter_api_key else None
         )
         self.models: Dict[str, PooledModel] = {}
         self._robin_premium = 0
@@ -97,9 +97,9 @@ class ModelPool:
                 )
 
         # If no models configured, fall back to the single default model
-        if not self.models and settings.openai_model:
-            self.models[settings.openai_model] = PooledModel(
-                model_id=settings.openai_model,
+        if not self.models and settings.openrouter_default_model:
+            self.models[settings.openrouter_default_model] = PooledModel(
+                model_id=settings.openrouter_default_model,
                 tier="volume",
                 semaphore=asyncio.Semaphore(concurrency),
             )
