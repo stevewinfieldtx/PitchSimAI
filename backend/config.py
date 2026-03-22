@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     max_personas_per_sim: int = 100
 
     class Config:
-        env_file = ".env"
+        env_file = "../.env"  # root of repo
 
 @lru_cache()
 def get_settings():
