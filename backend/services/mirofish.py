@@ -72,31 +72,24 @@ class MiroFishClient:
 
     async def health_check(self) -> bool:
         """Check if MiroFish service is reachable. Fast-fail with 2s timeout."""
-        # Quick check: if MiroFish is disabled in config, don't even try
-        if not settings.use_mirofish:
-            logger.debug("MiroFish disabled via USE_MIROFISH=false")
-            return False
-
         try:
-            # Use a short-lived client with aggressive timeouts
-            # so we don't block Railway's health check endpoint
             async with httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=httpx.Timeout(2.0, connect=2.0),
             ) as quick_client:
-                resp = await quick_client.get("/api/graph/data/test")
-                # Must get 200 OK — a 404 means we're hitting the wrong server
+                resp = await quick_client.get("/health")
                 if resp.status_code == 200:
-                    logger.info("MiroFish health check passed")
-                    return True
-                else:
-                    logger.warning(
-                        f"MiroFish health check got {resp.status_code} — "
-                        f"likely not a real MiroFish instance at {self.base_url}"
-                    )
-                    return False
+                    data = resp.json()
+                    # Verify it's actually MiroFish, not our own backend
+                    if data.get("service") == "MiroFish Backend" or data.get("status") == "ok":
+                        logger.info(f"MiroFish health check passed at {self.base_url}")
+                        return True
+                logger.warning(
+                    f"MiroFish health check failed ({resp.status_code}) at {self.base_url}"
+                )
+                return False
         except Exception as e:
-            logger.debug(f"MiroFish not available: {e}")
+            logger.warning(f"MiroFish not available at {self.base_url}: {e}")
             return False
 
     # ──────────────────────────────────────────────
@@ -239,19 +232,9 @@ class MiroFishClient:
     async def get_preparation_status(self, simulation_id: str) -> Dict[str, Any]:
         """Poll agent/config preparation progress."""
         client = await self._get_client()
-        resp = await client.get(
-            "/api/simulation/task-status",
-            params={"simulationId": simulation_id},
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    async def get_env_status(self, simulation_id: str) -> Dict[str, Any]:
-        """Validate simulation environment is ready to run."""
-        client = await self._get_client()
-        resp = await client.get(
-            "/api/simulation/env-status",
-            params={"simulationId": simulation_id},
+        resp = await client.post(
+            "/api/simulation/prepare/status",
+            json={"simulationId": simulation_id},
         )
         resp.raise_for_status()
         return resp.json()
@@ -275,20 +258,14 @@ class MiroFishClient:
     async def get_run_status(self, simulation_id: str) -> Dict[str, Any]:
         """Poll simulation execution progress."""
         client = await self._get_client()
-        resp = await client.get(
-            "/api/simulation/run-status",
-            params={"simulationId": simulation_id},
-        )
+        resp = await client.get(f"/api/simulation/{simulation_id}/run-status")
         resp.raise_for_status()
         return resp.json()
 
     async def get_simulation_details(self, simulation_id: str) -> Dict[str, Any]:
-        """Fetch complete agent action logs after simulation completes."""
+        """Fetch complete simulation state including agent actions."""
         client = await self._get_client()
-        resp = await client.get(
-            "/api/simulation/details",
-            params={"simulationId": simulation_id},
-        )
+        resp = await client.get(f"/api/simulation/{simulation_id}")
         resp.raise_for_status()
         return resp.json()
 
@@ -311,7 +288,10 @@ class MiroFishClient:
     async def get_report_status(self, report_id: str) -> Dict[str, Any]:
         """Poll report generation progress."""
         client = await self._get_client()
-        resp = await client.get(f"/api/report/generate/status/{report_id}")
+        resp = await client.post(
+            "/api/report/generate/status",
+            json={"reportId": report_id},
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -329,14 +309,14 @@ class MiroFishClient:
     async def chat_with_agent(
         self, simulation_id: str, agent_id: str, message: str
     ) -> Dict[str, Any]:
-        """Chat with a specific simulated buyer agent post-simulation."""
+        """Interview a specific simulated buyer agent post-simulation."""
         client = await self._get_client()
-        resp = await client.get(
-            "/api/simulation/chat",
-            params={
+        resp = await client.post(
+            "/api/simulation/interview",
+            json={
                 "simulationId": simulation_id,
                 "agentId": agent_id,
-                "message": message,
+                "question": message,
             },
         )
         resp.raise_for_status()
@@ -505,11 +485,6 @@ class MiroFishOrchestrator:
             # Generate simulation config
             await self.client.prepare_simulation(simulation_id, "config")
             await self._poll_preparation(simulation_id, poll_interval)
-
-            # Validate environment
-            env_status = await self.client.get_env_status(simulation_id)
-            if not env_status.get("ready", False):
-                logger.warning(f"Environment not fully ready: {env_status}")
 
             # ── Stage 3: Run Swarm Simulation ──
             await _update(SimulationStatus.RUNNING, f"Running swarm simulation with {num_agents} agents for {num_rounds} rounds...")

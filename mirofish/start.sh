@@ -20,21 +20,10 @@ echo "LLM_MODEL_NAME: ${LLM_MODEL_NAME}"
 echo "ZEP_API_KEY: $([ -n "${ZEP_API_KEY}" ] && echo 'SET' || echo 'NOT SET')"
 echo "=============================="
 
-# Ensure backend dependencies are installed
+# Install backend deps if needed
 cd /app/backend
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
-    echo "Using virtual environment"
-else
-    echo "No venv found, using system Python"
-fi
-
-# Try to install deps if not already done
 pip install -r requirements.txt 2>/dev/null || echo "Dependencies already installed"
 
-# Start MiroFish backend API on port 5001
+# MiroFish entry point is backend/run.py
 echo "Starting MiroFish backend on port 5001..."
-python -m flask run --host 0.0.0.0 --port 5001 2>/dev/null || \
-    python app.py 2>/dev/null || \
-    python main.py 2>/dev/null || \
-    echo "ERROR: Could not start MiroFish backend. Check the entry point."
+python run.py

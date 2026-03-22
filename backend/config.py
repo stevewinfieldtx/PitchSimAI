@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # which spawns thousands of autonomous AI buyer agents that interact and
     # produce realistic buying committee dynamics.
     # Set USE_MIROFISH=true once MiroFish is deployed as a Railway service.
-    use_mirofish: bool = False          # Disabled until MiroFish service is deployed
+    use_mirofish: bool = True           # MiroFish is the core engine
     mirofish_api_url: str = "http://localhost:5001"
     mirofish_num_agents: int = 50       # Default agents per simulation
     mirofish_num_rounds: int = 20       # Default interaction rounds
