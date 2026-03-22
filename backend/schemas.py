@@ -1,35 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import datetime
-
-
-# ---- Auth ----
-class UserCreate(BaseModel):
-    email: str
-    password: str
-    name: Optional[str] = None
-    organization_name: Optional[str] = None
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-class UserResponse(BaseModel):
-    id: UUID
-    email: str
-    name: Optional[str]
-    organization_name: Optional[str]
-    subscription_tier: str
-    simulations_remaining: Optional[int]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
 
 
 # ---- Personas ----

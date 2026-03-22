@@ -8,9 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db, async_session
-from models import User, Simulation, SimulationResult, PersonaResponse as PersonaResponseModel
-from schemas import SimulationCreate, SimulationResponse, SimulationDetailResponse
-from auth import get_current_user
+from models import Simulation, SimulationResult, PersonaResponse as PersonaResponseModel
+from schemas import SimulationCreate, SimulationResponse
 from services.simulation import run_simulation
 
 router = APIRouter()
@@ -20,18 +19,11 @@ router = APIRouter()
 async def create_simulation(
     sim_data: SimulationCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Check sim limit
-    if current_user.simulations_remaining is not None and current_user.simulations_remaining <= 0:
-        raise HTTPException(status_code=403, detail="No simulations remaining. Please upgrade your plan.")
-
-    # Determine number of personas to use
     num_personas = len(sim_data.persona_ids) if sim_data.persona_ids else sim_data.num_personas
 
     sim = Simulation(
-        user_id=current_user.id,
         pitch_title=sim_data.pitch_title,
         pitch_content=sim_data.pitch_content,
         company_name=sim_data.company_name,
@@ -42,15 +34,9 @@ async def create_simulation(
         status="pending",
     )
     db.add(sim)
-
-    # Decrement remaining simulations
-    if current_user.simulations_remaining is not None:
-        current_user.simulations_remaining -= 1
-
     await db.commit()
     await db.refresh(sim)
 
-    # Launch simulation in background
     background_tasks.add_task(
         run_simulation,
         str(sim.id),
@@ -68,10 +54,9 @@ async def list_simulations(
     status: Optional[str] = Query(None),
     limit: int = Query(20, le=100),
     offset: int = Query(0),
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Simulation).where(Simulation.user_id == current_user.id)
+    query = select(Simulation)
     if status:
         query = query.where(Simulation.status == status)
     query = query.order_by(desc(Simulation.created_at)).limit(limit).offset(offset)
@@ -83,13 +68,12 @@ async def list_simulations(
 @router.get("/{simulation_id}")
 async def get_simulation(
     simulation_id: UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(Simulation)
         .options(selectinload(Simulation.results))
-        .where(Simulation.id == simulation_id, Simulation.user_id == current_user.id)
+        .where(Simulation.id == simulation_id)
     )
     sim = result.scalar_one_or_none()
     if not sim:
@@ -130,12 +114,10 @@ async def get_simulation(
 @router.get("/{simulation_id}/responses")
 async def get_simulation_responses(
     simulation_id: UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify ownership
     sim_result = await db.execute(
-        select(Simulation).where(Simulation.id == simulation_id, Simulation.user_id == current_user.id)
+        select(Simulation).where(Simulation.id == simulation_id)
     )
     if not sim_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Simulation not found")

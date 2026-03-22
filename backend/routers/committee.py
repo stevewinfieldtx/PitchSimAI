@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import User, Persona
-from auth import get_current_user
+from models import Persona
 from services.buying_committee import generate_buying_committee, generate_persona_from_context
 from services.linkedin_enrichment import enrich_from_linkedin_text, enrich_from_name_and_company
 
@@ -23,7 +22,7 @@ class CommitteeRequest(BaseModel):
     company_name: Optional[str] = None
     product_context: Optional[str] = Field(
         default=None,
-        description="Brief description of what you're selling (helps generate more relevant objections)"
+        description="Brief description of what you're selling"
     )
 
 class DynamicPersonaRequest(BaseModel):
@@ -49,13 +48,8 @@ class NameCompanyRequest(BaseModel):
 @router.post("/generate")
 async def generate_committee(
     request: CommitteeRequest,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Generate a full buying committee based on industry, company size, and warmth.
-    Zero manual entry — personas are created contextually.
-    """
     try:
         committee = await generate_buying_committee(
             industry=request.industry,
@@ -63,7 +57,6 @@ async def generate_committee(
             warmth=request.warmth,
             company_name=request.company_name,
             product_context=request.product_context,
-            user_id=str(current_user.id),
             save_to_db=True,
         )
         return {
@@ -78,34 +71,19 @@ async def generate_committee(
 
 
 @router.post("/generate-persona")
-async def generate_single_persona(
-    request: DynamicPersonaRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Generate a single persona dynamically from title + industry + company size.
-    A CTO at a mid-sized bank is different from a CTO at a small pharma company.
-    """
+async def generate_single_persona(request: DynamicPersonaRequest):
     persona = await generate_persona_from_context(
         title=request.title,
         industry=request.industry,
         company_size=request.company_size,
         company_name=request.company_name,
         warmth=request.warmth,
-        user_id=str(current_user.id),
     )
     return persona
 
 
 @router.post("/enrich/linkedin")
-async def enrich_from_linkedin(
-    request: LinkedInTextRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Create a persona from pasted LinkedIn profile text.
-    Copy the text from someone's LinkedIn page and paste it here.
-    """
+async def enrich_from_linkedin(request: LinkedInTextRequest):
     result = await enrich_from_linkedin_text(
         profile_text=request.profile_text,
         warmth=request.warmth,
@@ -116,14 +94,7 @@ async def enrich_from_linkedin(
 
 
 @router.post("/enrich/name")
-async def enrich_from_name(
-    request: NameCompanyRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Create a persona from a name and company.
-    Uses AI knowledge of the company to infer role, concerns, and buying style.
-    """
+async def enrich_from_name(request: NameCompanyRequest):
     result = await enrich_from_name_and_company(
         name=request.name,
         company=request.company,
@@ -137,7 +108,6 @@ async def enrich_from_name(
 
 @router.get("/warmth-options")
 async def get_warmth_options():
-    """Get available committee warmth levels with descriptions."""
     from services.buying_committee import WARMTH_PROFILES
     return {
         key: {"label": key.title(), "description": val["description"]}
@@ -147,7 +117,6 @@ async def get_warmth_options():
 
 @router.get("/industries")
 async def get_supported_industries():
-    """Get industries with full context (departments, concerns)."""
     from services.buying_committee import INDUSTRY_CONTEXT
     return {
         industry: {

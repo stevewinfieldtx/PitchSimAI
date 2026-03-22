@@ -55,7 +55,7 @@ class Simulation(Base):
     __tablename__ = "simulations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     pitch_title = Column(String(500), nullable=False)
     pitch_content = Column(Text, nullable=False)
     company_name = Column(String(255))

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import init_db
-from routers import auth, simulations, personas, chat, committee
+from routers import simulations, personas, chat, committee
 
 settings = get_settings()
 
@@ -35,7 +35,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(simulations.router, prefix="/api/simulations", tags=["Simulations"])
 app.include_router(personas.router, prefix="/api/personas", tags=["Personas"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])

@@ -166,7 +166,6 @@ async def generate_buying_committee(
     warmth: str,  # "friendly", "mixed", "hostile"
     company_name: Optional[str] = None,
     product_context: Optional[str] = None,
-    user_id: Optional[str] = None,
     save_to_db: bool = True,
 ) -> List[Dict[str, Any]]:
     """
@@ -205,7 +204,6 @@ async def generate_buying_committee(
             warmth_profile=warmth_profile,
             company_name=company_name,
             product_context=product_context,
-            user_id=user_id,
             save_to_db=save_to_db,
         )
     else:
@@ -217,7 +215,6 @@ async def generate_buying_committee(
             industry_ctx=industry_ctx,
             warmth_profile=warmth_profile,
             company_name=company_name,
-            user_id=user_id,
             save_to_db=save_to_db,
         )
 
@@ -231,7 +228,6 @@ async def _llm_generate_committee(
     warmth_profile: Dict,
     company_name: Optional[str],
     product_context: Optional[str],
-    user_id: Optional[str],
     save_to_db: bool,
 ) -> List[Dict[str, Any]]:
     """Use LLM to generate rich, contextual buying committee personas."""
@@ -308,7 +304,7 @@ Respond with valid JSON array:
         return await _mock_generate_committee(
             industry, company_size, warmth, structure,
             INDUSTRY_CONTEXT.get(industry, INDUSTRY_CONTEXT["SaaS"]),
-            warmth_profile, company_name, user_id, save_to_db
+            warmth_profile, company_name, save_to_db
         )
 
     # Save to database
@@ -329,7 +325,6 @@ Respond with valid JSON array:
                     budget_authority=member.get("budget_authority", "partial"),
                     bio=member.get("bio"),
                     is_public=False,
-                    created_by=UUID(user_id) if user_id else None,
                 )
                 db.add(persona)
                 await db.flush()
@@ -364,7 +359,6 @@ async def _mock_generate_committee(
     industry_ctx: Dict,
     warmth_profile: Dict,
     company_name: Optional[str],
-    user_id: Optional[str],
     save_to_db: bool,
 ) -> List[Dict[str, Any]]:
     """Generate committee without LLM using intelligent randomization."""
@@ -445,10 +439,7 @@ async def _mock_generate_committee(
             }
 
             if save_to_db:
-                persona = Persona(
-                    **persona_data,
-                    created_by=UUID(user_id) if user_id else None,
-                )
+                persona = Persona(**persona_data)
                 db.add(persona)
                 await db.flush()
                 persona_data["id"] = str(persona.id)
@@ -467,7 +458,6 @@ async def generate_persona_from_context(
     company_size: str,
     company_name: Optional[str] = None,
     warmth: str = "mixed",
-    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate a single persona dynamically from title + industry + company size.

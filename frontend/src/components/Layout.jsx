@@ -1,15 +1,13 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Plus, Users, LogOut, Zap } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, Zap, UserPlus } from 'lucide-react';
 
 export default function Layout() {
-  const { user, logout } = useAuth();
   const location = useLocation();
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/new', label: 'New Simulation', icon: Plus },
-    { path: '/committee', label: 'Buying Committee', icon: Users },
+    { path: '/committee', label: 'Buying Committee', icon: UserPlus },
     { path: '/personas', label: 'Persona Library', icon: Users },
   ];
 
@@ -43,19 +41,6 @@ export default function Layout() {
                   );
                 })}
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">{user?.name || user?.email}</span>
-              <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full font-medium">
-                {user?.subscription_tier || 'free'}
-              </span>
-              <button
-                onClick={logout}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
             </div>
           </div>
         </div>

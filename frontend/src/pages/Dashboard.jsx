@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { useAuth } from '../contexts/AuthContext';
 import { Plus, Clock, CheckCircle, AlertCircle, ArrowRight, Zap, Target, TrendingUp } from 'lucide-react';
 
 const statusConfig = {
@@ -12,7 +11,6 @@ const statusConfig = {
 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
   const [simulations, setSimulations] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +28,7 @@ export default function Dashboard() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome back{user?.name ? `, ${user.name}` : ''}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
           <p className="text-gray-500 mt-1">Test your pitches against AI buyer personas</p>
         </div>
         <Link
@@ -73,7 +71,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Sims Remaining</p>
-              <p className="text-2xl font-bold">{user?.simulations_remaining ?? '∞'}</p>
+              <p className="text-2xl font-bold">∞</p>
             </div>
           </div>
         </div>

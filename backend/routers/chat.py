@@ -6,9 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import User, Simulation, PersonaConversation, PersonaResponse as PersonaResponseModel, Persona
-from schemas import ChatMessage, ChatResponse
-from auth import get_current_user
+from models import Simulation, PersonaConversation, PersonaResponse as PersonaResponseModel, Persona
+from schemas import ChatMessage
 from services.simulation import generate_persona_chat_response
 
 router = APIRouter()
@@ -19,14 +18,11 @@ async def chat_with_persona(
     simulation_id: UUID,
     persona_id: UUID,
     message: ChatMessage,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify simulation ownership and completion
     sim_result = await db.execute(
         select(Simulation).where(
             Simulation.id == simulation_id,
-            Simulation.user_id == current_user.id,
             Simulation.status == "completed"
         )
     )
@@ -34,13 +30,11 @@ async def chat_with_persona(
     if not sim:
         raise HTTPException(status_code=404, detail="Completed simulation not found")
 
-    # Get persona
     persona_result = await db.execute(select(Persona).where(Persona.id == persona_id))
     persona = persona_result.scalar_one_or_none()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
 
-    # Get or create conversation
     conv_result = await db.execute(
         select(PersonaConversation).where(
             PersonaConversation.simulation_id == simulation_id,
@@ -50,7 +44,6 @@ async def chat_with_persona(
     conversation = conv_result.scalar_one_or_none()
 
     if not conversation:
-        # Get persona's initial response from simulation
         pr_result = await db.execute(
             select(PersonaResponseModel).where(
                 PersonaResponseModel.simulation_id == simulation_id,
@@ -58,7 +51,6 @@ async def chat_with_persona(
             )
         )
         persona_response = pr_result.scalar_one_or_none()
-
         initial_context = persona_response.initial_reaction if persona_response else ""
 
         conversation = PersonaConversation(
@@ -70,7 +62,6 @@ async def chat_with_persona(
         )
         db.add(conversation)
 
-    # Add user message
     history = conversation.conversation_history or []
     history.append({
         "role": "user",
@@ -78,7 +69,6 @@ async def chat_with_persona(
         "timestamp": datetime.utcnow().isoformat()
     })
 
-    # Generate response
     ai_response = await generate_persona_chat_response(
         persona=persona,
         pitch_content=sim.pitch_content,
@@ -108,15 +98,10 @@ async def chat_with_persona(
 async def get_chat_history(
     simulation_id: UUID,
     persona_id: UUID,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify ownership
     sim_result = await db.execute(
-        select(Simulation).where(
-            Simulation.id == simulation_id,
-            Simulation.user_id == current_user.id,
-        )
+        select(Simulation).where(Simulation.id == simulation_id)
     )
     if not sim_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Simulation not found")

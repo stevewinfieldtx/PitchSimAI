@@ -1,39 +1,16 @@
 const API_BASE = '/api';
 
 class ApiClient {
-  constructor() {
-    this.token = localStorage.getItem('pitchsim_token');
-  }
-
-  setToken(token) {
-    this.token = token;
-    if (token) {
-      localStorage.setItem('pitchsim_token', token);
-    } else {
-      localStorage.removeItem('pitchsim_token');
-    }
-  }
-
   async request(path, options = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
     });
-
-    if (response.status === 401) {
-      this.setToken(null);
-      window.location.href = '/login';
-      throw new Error('Unauthorized');
-    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
@@ -42,33 +19,6 @@ class ApiClient {
 
     if (response.status === 204) return null;
     return response.json();
-  }
-
-  // Auth
-  async register(data) {
-    const result = await this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    this.setToken(result.access_token);
-    return result;
-  }
-
-  async login(data) {
-    const result = await this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    this.setToken(result.access_token);
-    return result;
-  }
-
-  async getMe() {
-    return this.request('/auth/me');
-  }
-
-  logout() {
-    this.setToken(null);
   }
 
   // Simulations
