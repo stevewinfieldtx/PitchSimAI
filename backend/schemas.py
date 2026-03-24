@@ -51,6 +51,7 @@ class SimulationCreate(BaseModel):
     pitch_content: str
     company_name: Optional[str] = None
     industry: Optional[str] = None
+    sub_industry: Optional[str] = None
     target_audience: Optional[str] = None
     num_personas: int = Field(default=10, ge=1, le=100)
     persona_filters: Optional[PersonaFilter] = None

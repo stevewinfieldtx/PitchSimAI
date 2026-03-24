@@ -65,6 +65,7 @@ class AgentPersona:
         buying_style: str,
         budget_authority: str = "influence",
         bio: str = "",
+        cultural_context: Optional[Dict[str, str]] = None,
     ):
         self.name = name
         self.title = title
@@ -76,27 +77,46 @@ class AgentPersona:
         self.buying_style = buying_style
         self.budget_authority = budget_authority
         self.bio = bio
+        self.cultural_context = cultural_context
         self.messages: List[Dict[str, str]] = []  # conversation history
 
     def system_prompt(self) -> str:
         traits = ", ".join(f"{k}: {v}" for k, v in self.personality.items())
         pains = ", ".join(self.pain_points) if self.pain_points else "general efficiency"
-        return f"""You are {self.name}, {self.title} at a {self.company_size} {self.industry} company.
+        prompt = f"""You are {self.name}, {self.title} at a {self.company_size} {self.industry} company.
 
 ROLE IN BUYING COMMITTEE: {self.role_in_committee}
 PERSONALITY: {traits}
 KEY PAIN POINTS: {pains}
 BUYING STYLE: {self.buying_style}
 BUDGET AUTHORITY: {self.budget_authority}
-BACKGROUND: {self.bio}
+BACKGROUND: {self.bio}"""
+
+        if self.cultural_context:
+            seller_region = self.cultural_context.get("seller_region", "")
+            buyer_region = self.cultural_context.get("buyer_region", "")
+            cultural_notes = self.cultural_context.get("cultural_notes", "")
+            cultural_block = f"""
+CULTURAL CONTEXT:
+The seller is based in {seller_region}. Your organization is in {buyer_region}."""
+            if cultural_notes:
+                cultural_block += f"\n{cultural_notes}"
+            cultural_block += f"""
+Consider cultural norms around business communication, decision-making hierarchy,
+relationship-building expectations, and negotiation styles typical of {buyer_region}.
+Your reactions should reflect your region's cultural business norms."""
+            prompt += cultural_block
+
+        prompt += """
 
 You are evaluating a sales pitch as part of a buying committee. Stay fully in character.
 Be specific about YOUR concerns from YOUR role's perspective. Reference real business
-scenarios. Don't be generic — think about what {self.title} at a {self.company_size}
-{self.industry} company actually worries about day to day.
+scenarios. Don't be generic — think about what {title} at a {company_size}
+{industry} company actually worries about day to day.
 
 When you agree with someone, say why specifically. When you disagree, push back with
 concrete reasoning. You have real opinions shaped by your experience."""
+        return prompt.format(title=self.title, company_size=self.company_size, industry=self.industry)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -224,9 +244,11 @@ def generate_committee_tables(
     industry: str,
     company_size: str,
     company_name: str = "",
+    sub_industry: Optional[str] = None,
     num_tables: int = 3,
     personas_per_table: int = 5,
     existing_personas: Optional[List[Dict[str, Any]]] = None,
+    cultural_context: Optional[Dict[str, str]] = None,
 ) -> List[CommitteeTable]:
     """
     Generate multiple buying committee tables for deliberation.
@@ -273,7 +295,7 @@ def generate_committee_tables(
                 personality[key] = round(value + random.uniform(-0.1, 0.1), 2)
 
             # Industry-specific pain points
-            pain_points = _get_industry_pain_points(industry, role_config["focus"])
+            pain_points = _get_industry_pain_points(industry, sub_industry, role_config["focus"])
 
             persona = AgentPersona(
                 name=name,
@@ -287,6 +309,7 @@ def generate_committee_tables(
                 budget_authority=role_config["budget_authority"],
                 bio=f"15+ years in {industry}. Currently at {'a ' + company_size + ' company' if not company_name else company_name}. "
                     f"Focused on {role_config['focus']}.",
+                cultural_context=cultural_context,
             )
             personas.append(persona)
 
@@ -300,9 +323,19 @@ def generate_committee_tables(
     return tables
 
 
-def _get_industry_pain_points(industry: str, focus: str) -> List[str]:
-    """Generate relevant pain points based on industry and role focus."""
+def _get_industry_pain_points(industry: str, sub_industry: Optional[str] = None, focus: str = "") -> List[str]:
+    """Generate relevant pain points based on industry, sub-industry, and role focus."""
     industry_lower = industry.lower()
+
+    # Sub-industry specific pain points for cybersecurity
+    sub_industry_pains = {
+        "penetration_testing": ["keeping up with evolving attack surfaces", "qualified pentester shortage", "retesting cadence vs budget"],
+        "network_security": ["encrypted traffic blind spots", "east-west traffic monitoring gaps", "alert fatigue in SOC"],
+        "email_security": ["BEC attacks bypassing native controls", "user click-through on phishing", "DLP for outbound sensitive data"],
+        "cloud_security": ["misconfigured cloud resources", "identity and access management at scale", "multi-cloud visibility gaps"],
+        "application_security": ["vulnerable dependencies in supply chain", "secure SDLC adoption", "addressing security debt in legacy code"],
+        "incident_response": ["mean time to detect getting longer", "forensics and attribution challenges", "coordinating across tools"],
+    }
 
     base_pains = {
         "technology": ["integration with legacy systems", "developer productivity", "technical debt", "cloud costs"],
@@ -314,12 +347,21 @@ def _get_industry_pain_points(industry: str, focus: str) -> List[str]:
         "saas": ["churn reduction", "feature adoption", "scalability", "API reliability"],
     }
 
-    # Find best match
+    # Check for sub-industry specific pains first
     pains = []
-    for key, values in base_pains.items():
-        if key in industry_lower:
-            pains = values[:3]
-            break
+    if sub_industry:
+        sub_lower = sub_industry.lower().replace(" ", "_").replace("-", "_")
+        for key, values in sub_industry_pains.items():
+            if key in sub_lower or sub_lower in key:
+                pains = values[:3]
+                break
+
+    # If no sub-industry match, find best match on industry
+    if not pains:
+        for key, values in base_pains.items():
+            if key in industry_lower:
+                pains = values[:3]
+                break
 
     if not pains:
         pains = ["operational efficiency", "cost optimization", "competitive pressure"]
@@ -358,6 +400,10 @@ class SwarmEngine:
         company_name: str = "",
         company_size: str = "mid-market",
         target_audience: str = "",
+        sub_industry: Optional[str] = None,
+        seller_region: Optional[str] = None,
+        buyer_region: Optional[str] = None,
+        cultural_notes: Optional[str] = None,
         num_tables: int = 3,
         personas_per_table: int = 5,
         debate_rounds: int = 2,
@@ -380,13 +426,24 @@ class SwarmEngine:
         # ── Stage 1: Generate Committees ──
         await _progress("initializing", "Assembling buying committees...", 5)
 
+        # Build cultural context dict if provided
+        cultural_context = None
+        if seller_region or buyer_region or cultural_notes:
+            cultural_context = {
+                "seller_region": seller_region or "",
+                "buyer_region": buyer_region or "",
+                "cultural_notes": cultural_notes or "",
+            }
+
         tables = generate_committee_tables(
             industry=industry,
             company_size=company_size,
             company_name=company_name,
+            sub_industry=sub_industry,
             num_tables=num_tables,
             personas_per_table=personas_per_table,
             existing_personas=existing_personas,
+            cultural_context=cultural_context,
         )
 
         logger.info(f"Created {len(tables)} committee tables with {sum(len(t.personas) for t in tables)} total agents")
@@ -415,7 +472,7 @@ class SwarmEngine:
 
         # ── Stage 6: Final Consensus ──
         await _progress("consensus", "Building final consensus and recommendations...", 90)
-        consensus = await self._generate_consensus(tables, cross_table_insights, pitch_content, industry, company_name)
+        consensus = await self._generate_consensus(tables, cross_table_insights, pitch_content, industry, company_name, cultural_context)
 
         await _progress("completed", "Deliberation complete!", 100)
 
@@ -433,6 +490,9 @@ class SwarmEngine:
                 "elapsed_seconds": round(elapsed, 1),
                 "industry": industry,
                 "company_name": company_name,
+                "sub_industry": sub_industry,
+                "seller_region": seller_region,
+                "buyer_region": buyer_region,
             },
             "scores": consensus.get("scores", {}),
         }
@@ -496,6 +556,11 @@ As {persona.title}, give your gut reaction in 3-5 sentences. Be specific:
 - Would you keep reading / take the meeting, or pass?
 
 Respond in first person, as yourself. Be direct and honest."""
+
+        if persona.cultural_context and (persona.cultural_context.get("seller_region") or persona.cultural_context.get("buyer_region")):
+            seller_region = persona.cultural_context.get("seller_region", "")
+            buyer_region = persona.cultural_context.get("buyer_region", "")
+            prompt += f"\n\nNote: The vendor is from {seller_region}. Consider how that might influence communication and business approach."
 
         content, _ = await self.pool.call_with_failover(
             tier="premium" if persona.budget_authority in ("full", "veto") else "volume",
@@ -720,6 +785,7 @@ Respond with valid JSON:
         pitch: str,
         industry: str,
         company_name: str,
+        cultural_context: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Produce the final consensus: scores, objections, and specific recommendations."""
         # Build complete context
@@ -739,7 +805,24 @@ CROSS-COMMITTEE ANALYSIS:
 {json.dumps(cross_insights, indent=2)}
 
 ORIGINAL PITCH:
-{pitch[:2000]}
+{pitch[:2000]}"""
+
+        if cultural_context and (cultural_context.get("seller_region") or cultural_context.get("buyer_region")):
+            seller_region = cultural_context.get("seller_region", "")
+            buyer_region = cultural_context.get("buyer_region", "")
+            cultural_notes = cultural_context.get("cultural_notes", "")
+            prompt += f"""
+
+CULTURAL CONTEXT:
+The seller is based in {seller_region}. The buyer organization is in {buyer_region}."""
+            if cultural_notes:
+                prompt += f"\n{cultural_notes}"
+            prompt += f"""
+Consider how cultural differences in business communication, decision-making, negotiation
+styles, and relationship-building between {seller_region} and {buyer_region} may impact
+this deal. Factor this into your final analysis and recommendations."""
+
+        prompt += """
 
 Produce the FINAL analysis. This is what the salesperson will use to improve their pitch.
 Be specific, actionable, and brutally honest. No fluff.

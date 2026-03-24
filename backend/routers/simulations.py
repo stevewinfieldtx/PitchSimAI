@@ -24,6 +24,11 @@ async def create_simulation(
     num_personas = len(sim_data.persona_ids) if sim_data.persona_ids else sim_data.num_personas
     config = sim_data.config or {}
 
+    # Extract cultural context from config
+    seller_region = config.get("seller_region", "")
+    buyer_region = config.get("buyer_region", "")
+    cultural_notes = config.get("cultural_notes", "")
+
     sim = Simulation(
         pitch_title=sim_data.pitch_title,
         pitch_content=sim_data.pitch_content,
@@ -76,6 +81,10 @@ async def create_simulation(
         company_name=sim_data.company_name or "",
         company_size=config.get("company_size", "mid-market"),
         target_audience=sim_data.target_audience or "",
+        sub_industry=sim_data.sub_industry,
+        seller_region=seller_region,
+        buyer_region=buyer_region,
+        cultural_notes=cultural_notes,
         num_tables=num_tables,
         personas_per_table=personas_per_table,
         debate_rounds=debate_rounds,

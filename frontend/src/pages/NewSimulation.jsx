@@ -1,11 +1,39 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Zap, ArrowLeft, ArrowRight, Send, Users, Settings2, Beaker } from 'lucide-react';
+import { Zap, ArrowLeft, ArrowRight, Send, Users, Settings2, Beaker, Globe, MessageCircle } from 'lucide-react';
 
-const INDUSTRIES = ['SaaS', 'Financial Services', 'Healthcare', 'Retail', 'Manufacturing', 'Cybersecurity'];
+const INDUSTRY_MAP = {
+  'Technology': ['SaaS', 'Cloud Infrastructure', 'AI/ML', 'DevOps/Platform', 'Semiconductors', 'IoT'],
+  'Cybersecurity': ['Network Security', 'Email Security', 'Identity & Access', 'OT/ICS Security', 'GRC/Compliance', 'Penetration Testing'],
+  'Financial Services': ['Banking', 'Insurance', 'Fintech', 'Wealth Management', 'Payments', 'Cryptocurrency'],
+  'Healthcare': ['Hospital Systems', 'Pharma', 'MedTech', 'Health IT', 'Telehealth', 'Clinical Research'],
+  'Manufacturing': ['Discrete Manufacturing', 'Process Manufacturing', 'Automotive', 'Aerospace', 'Food & Beverage', 'Industrial Automation'],
+  'Energy & Utilities': ['Oil & Gas', 'Renewable Energy', 'Electric Utilities', 'Water/Wastewater', 'Pipeline Operations', 'Nuclear'],
+  'Retail & E-Commerce': ['B2C Retail', 'B2B Commerce', 'Luxury/Fashion', 'Grocery', 'Marketplace'],
+  'Government & Defense': ['Federal/Civilian', 'Defense/Intelligence', 'State & Local', 'Education'],
+  'Telecommunications': ['Carrier/ISP', 'Enterprise Communications', '5G/Edge', 'Managed Services'],
+  'Professional Services': ['Consulting', 'Legal', 'Accounting', 'Staffing/HR'],
+};
+
 const COMPANY_SIZES = ['early-stage', 'mid-market', 'enterprise'];
 const BUYING_STYLES = ['early-adopter', 'consensus-builder', 'risk-averse', 'analytical'];
+
+const SELLER_REGIONS = [
+  'North America',
+  'Western Europe',
+  'Northern Europe',
+  'Eastern Europe',
+  'Middle East',
+  'East Asia',
+  'Southeast Asia',
+  'South Asia',
+  'Latin America',
+  'Africa',
+  'Oceania',
+];
+
+const BUYER_REGIONS = SELLER_REGIONS;
 
 // ── Test Presets ──
 const PRESETS = [
@@ -16,6 +44,7 @@ const PRESETS = [
       pitch_title: 'WireX Systems Ne2ition — AI-Powered Network Detection & Response',
       company_name: 'WireX Systems',
       industry: 'Cybersecurity',
+      sub_industry: 'Network Security',
       target_audience: 'CISOs and SOC teams at mid-market and enterprise companies',
       pitch_content: `WireX Systems Ne2ition Platform — AI-Powered Network Detection & Response (NDR)
 
@@ -48,6 +77,7 @@ We'd love to show you a live demo with YOUR network traffic. 30 minutes is all i
       pitch_title: 'Trustifi — AI-Powered Email Security & Encryption',
       company_name: 'Trustifi',
       industry: 'Cybersecurity',
+      sub_industry: 'Email Security',
       target_audience: 'IT directors, CISOs, and compliance officers at regulated industries',
       pitch_content: `Trustifi — Stop Email Threats Before They Reach Your Users
 
@@ -85,6 +115,7 @@ Let us show you what your current email security is missing. Free 14-day trial, 
       pitch_title: 'SecurityGate.io — Integrated Risk Management for Critical Infrastructure',
       company_name: 'SecurityGate.io',
       industry: 'Cybersecurity',
+      sub_industry: 'OT/ICS Security',
       target_audience: 'OT security leaders, risk managers, and CISOs at critical infrastructure and industrial companies',
       pitch_content: `SecurityGate.io — Integrated Risk Management for OT/ICS Environments
 
@@ -123,7 +154,8 @@ Request a demo to see your risk posture mapped against the frameworks your regul
     data: {
       pitch_title: 'SAP Business One — ERP for Growing Businesses',
       company_name: 'SAP',
-      industry: 'SaaS',
+      industry: 'Technology',
+      sub_industry: 'SaaS',
       target_audience: 'CFOs, COOs, and operations leaders at small and mid-market businesses',
       pitch_content: `SAP Business One — The ERP That Grows With You
 
@@ -156,6 +188,45 @@ The ROI:
 Don't let your business outrun your systems. See SAP Business One in a personalized demo with YOUR data.`,
     },
   },
+  {
+    label: 'NCC Group',
+    color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100',
+    data: {
+      pitch_title: 'NCC Group — Technical Assurance & Penetration Testing',
+      company_name: 'NCC Group',
+      industry: 'Cybersecurity',
+      sub_industry: 'Penetration Testing',
+      target_audience: 'CISOs, VPs of Engineering, and security teams at enterprise and regulated industries',
+      pitch_content: `NCC Group — Technical Assurance Services: Penetration Testing & Security Assessment
+
+Your security posture is only as strong as your weakest link. Compliance reports and vulnerability scans tell you what's broken, but they don't tell you if attackers can actually exploit those weaknesses in your environment.
+
+NCC Group's Technical Assurance Services provide independent, expert-led penetration testing and security assessments. We simulate real-world attacks to uncover hidden vulnerabilities, misconfigurations, and human factors that automated tools miss.
+
+What We Provide:
+• Comprehensive penetration testing — network, application, cloud, and physical
+• Real-world attack simulations (red team exercises) against your security teams
+• Hardware security assessments — chip-level and firmware analysis
+• Managed detection services (MDS) — continuous threat hunting and incident response
+• Security assessments aligned to frameworks: NIST, ISO 27001, PCI-DSS, HIPAA, GDPR
+• Post-test guidance and remediation roadmaps with executive reporting
+
+Why NCC Group:
+• Global expertise — 2,500+ security consultants across 25+ countries
+• Independent validation — no conflicts of interest, no tools to sell
+• Regulatory compliance support — direct experience with auditors and regulators
+• Proven results — average vulnerability discovery rate 40% higher than automated tools
+• Trusted by Fortune 500 companies and critical infrastructure operators
+
+Real Results:
+• One financial institution prevented a $45M fraud scheme before it happened
+• Major healthcare system discovered 12 critical misconfigurations in their AWS environment
+• Telecommunications provider reduced mean-time-to-detection by 80% with our MDS program
+• Government agency passed SOC 2 Type II audit on first attempt with our guidance
+
+Let us show you what's really at risk. Comprehensive assessments start within weeks, not months.`,
+    },
+  },
 ];
 
 export default function NewSimulation() {
@@ -176,7 +247,11 @@ export default function NewSimulation() {
     pitch_content: '',
     company_name: '',
     industry: '',
+    sub_industry: '',
     target_audience: '',
+    seller_region: '',
+    buyer_region: '',
+    cultural_notes: '',
     num_personas: 10,
     num_tables: 3,
     personas_per_table: 5,
@@ -208,6 +283,14 @@ export default function NewSimulation() {
     });
   };
 
+  const handleIndustryChange = (newIndustry) => {
+    setForm({
+      ...form,
+      industry: newIndustry,
+      sub_industry: '', // Reset sub-industry when industry changes
+    });
+  };
+
   const handleSubmit = async () => {
     setError('');
     setLoading(true);
@@ -228,6 +311,8 @@ export default function NewSimulation() {
     }
   };
 
+  const subIndustries = form.industry ? INDUSTRY_MAP[form.industry] : [];
+
   return (
     <div className="max-w-3xl mx-auto">
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-gray-500 hover:text-gray-700 mb-6 text-sm">
@@ -247,18 +332,18 @@ export default function NewSimulation() {
 
       {/* Step 1: Pitch Content */}
       {step === 1 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <h2 className="text-lg font-semibold">Your Pitch</h2>
 
-          {/* Quick-Load Presets */}
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Quick Load — Test Pitches</p>
-            <div className="flex flex-wrap gap-2">
+          {/* Quick-Load Presets - Grid Layout */}
+          <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+            <p className="text-xs font-medium text-gray-500 mb-4 uppercase tracking-wide">Quick Load — Test Pitches</p>
+            <div className="grid grid-cols-2 gap-3">
               {PRESETS.map(preset => (
                 <button
                   key={preset.label}
                   onClick={() => loadPreset(preset)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${preset.color}`}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium border transition flex items-center justify-center ${preset.color}`}
                 >
                   {preset.label}
                 </button>
@@ -293,9 +378,9 @@ export default function NewSimulation() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-              <select value={form.industry} onChange={update('industry')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
+              <select value={form.industry} onChange={(e) => handleIndustryChange(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
                 <option value="">Select...</option>
-                {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                {Object.keys(INDUSTRY_MAP).map(ind => <option key={ind} value={ind}>{ind}</option>)}
               </select>
             </div>
             <div>
@@ -311,65 +396,124 @@ export default function NewSimulation() {
         </div>
       )}
 
-      {/* Step 2: Persona Filters */}
+      {/* Step 2: Persona Filters & Cultural Context */}
       {step === 2 && (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold">Buyer Persona Filters</h2>
+          {/* Buyer Persona Filters Section */}
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Buyer Persona Filters</h2>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Industries</label>
-            <div className="flex flex-wrap gap-2">
-              {INDUSTRIES.map(ind => (
-                <button
-                  key={ind}
-                  onClick={() => toggleFilter('industries', ind)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
-                    form.persona_filters.industries.includes(ind)
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
-                  }`}
-                >
-                  {ind}
-                </button>
-              ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
+              <select value={form.industry} onChange={(e) => handleIndustryChange(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
+                <option value="">Select an industry...</option>
+                {Object.keys(INDUSTRY_MAP).map(ind => (
+                  <option key={ind} value={ind}>{ind}</option>
+                ))}
+              </select>
+            </div>
+
+            {form.industry && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sub-Industry</label>
+                <select value={form.sub_industry} onChange={update('sub_industry')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
+                  <option value="">Select a sub-industry...</option>
+                  {subIndustries.map(sub => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Company Size</label>
+              <div className="flex flex-wrap gap-2">
+                {COMPANY_SIZES.map(size => (
+                  <button
+                    key={size}
+                    onClick={() => toggleFilter('company_sizes', size)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                      form.persona_filters.company_sizes.includes(size)
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Buying Style</label>
+              <div className="flex flex-wrap gap-2">
+                {BUYING_STYLES.map(style => (
+                  <button
+                    key={style}
+                    onClick={() => toggleFilter('buying_styles', style)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                      form.persona_filters.buying_styles.includes(style)
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                    }`}
+                  >
+                    {style}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Company Size</label>
-            <div className="flex flex-wrap gap-2">
-              {COMPANY_SIZES.map(size => (
-                <button
-                  key={size}
-                  onClick={() => toggleFilter('company_sizes', size)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
-                    form.persona_filters.company_sizes.includes(size)
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Divider */}
+          <div className="border-t border-gray-200" />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Buying Style</label>
-            <div className="flex flex-wrap gap-2">
-              {BUYING_STYLES.map(style => (
-                <button
-                  key={style}
-                  onClick={() => toggleFilter('buying_styles', style)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
-                    form.persona_filters.buying_styles.includes(style)
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
-                  }`}
-                >
-                  {style}
-                </button>
-              ))}
+          {/* Cultural Context Section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary-600" />
+              <h2 className="text-lg font-semibold">Cultural Context</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Seller Region</label>
+                <select value={form.seller_region} onChange={update('seller_region')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
+                  <option value="">Select...</option>
+                  {SELLER_REGIONS.map(region => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Buyer Region</label>
+                <select value={form.buyer_region} onChange={update('buyer_region')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none bg-white">
+                  <option value="">Select...</option>
+                  {BUYER_REGIONS.map(region => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {form.seller_region && form.buyer_region && form.seller_region !== form.buyer_region && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2">
+                <MessageCircle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-700">
+                  Cross-cultural context will shape persona behavior and communication expectations
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Cultural Notes (Optional)</label>
+              <textarea
+                value={form.cultural_notes}
+                onChange={update('cultural_notes')}
+                rows={4}
+                placeholder="e.g., Formal hierarchy, consensus decision-making, seasonal buying patterns..."
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none resize-none"
+              />
             </div>
           </div>
 
@@ -410,6 +554,34 @@ export default function NewSimulation() {
                 <p className="font-medium">{form.target_audience || 'All personas'}</p>
               </div>
             </div>
+            {form.sub_industry && (
+              <div>
+                <p className="text-sm text-gray-500">Sub-Industry</p>
+                <p className="font-medium">{form.sub_industry}</p>
+              </div>
+            )}
+            {(form.seller_region || form.buyer_region) && (
+              <div className="grid grid-cols-2 gap-4">
+                {form.seller_region && (
+                  <div>
+                    <p className="text-sm text-gray-500">Seller Region</p>
+                    <p className="font-medium">{form.seller_region}</p>
+                  </div>
+                )}
+                {form.buyer_region && (
+                  <div>
+                    <p className="text-sm text-gray-500">Buyer Region</p>
+                    <p className="font-medium">{form.buyer_region}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {form.cultural_notes && (
+              <div>
+                <p className="text-sm text-gray-500">Cultural Notes</p>
+                <p className="font-medium text-sm">{form.cultural_notes}</p>
+              </div>
+            )}
           </div>
 
           {/* Swarm Engine Configuration */}
