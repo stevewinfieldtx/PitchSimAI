@@ -269,106 +269,329 @@ function CommitteeAccordion({ table, index, onDoubleClick }) {
   );
 }
 
+// ─── Sentiment badge colors ───
+const SENTIMENT_BADGE = {
+  positive: 'bg-emerald-100 text-emerald-700',
+  leaning_positive: 'bg-emerald-50 text-emerald-600',
+  mixed: 'bg-amber-100 text-amber-700',
+  leaning_negative: 'bg-orange-100 text-orange-700',
+  negative: 'bg-red-100 text-red-700',
+  unknown: 'bg-gray-100 text-gray-500',
+};
+
 // ─── By Role Tab Component ───
-function ByRoleTab({ debateTranscript }) {
-  const [expandedRole, setExpandedRole] = useState(null);
+function ByRoleTab({ debateTranscript, simulationId }) {
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [synthesis, setSynthesis] = useState({});  // role -> synthesis data
+  const [loadingRole, setLoadingRole] = useState(null);
+  const [outputMode, setOutputMode] = useState('bullets'); // 'bullets' | 'paragraph'
+  const [copiedField, setCopiedField] = useState(null);
+  const [showQuotes, setShowQuotes] = useState(false);
 
-  // Group all responses by title across all tables
+  // Group all responses by title across all tables (quick local scan for the role list)
   const roleGroups = {};
-
-  debateTranscript.forEach((table, tableIdx) => {
+  debateTranscript.forEach((table) => {
     const tableVariant = VARIANT_LABELS[table.variant]?.label || table.variant;
-
     (table.rounds || []).forEach((round) => {
-      if (round.round === 'initial_reaction') {
-        (round.responses || []).forEach((response) => {
-          const title = response.title || 'Unknown';
-          if (!roleGroups[title]) {
-            roleGroups[title] = {
-              title,
-              personas: [],
-              quotes: [],
-              tables: new Set(),
-            };
-          }
-
-          const persona = table.personas?.find(p => p.name === response.persona);
-          if (persona && !roleGroups[title].personas.find(p => p.name === response.persona)) {
-            roleGroups[title].personas.push(persona);
-          }
-
-          roleGroups[title].quotes.push({
-            persona: response.persona,
-            response: response.response,
-            table: tableVariant,
-          });
-          roleGroups[title].tables.add(tableVariant);
-        });
-      }
+      (round.responses || []).forEach((response) => {
+        const title = response.title || 'Unknown';
+        if (!roleGroups[title]) {
+          roleGroups[title] = { title, count: 0, tables: new Set(), roles: new Set() };
+        }
+        roleGroups[title].count++;
+        roleGroups[title].tables.add(tableVariant);
+        roleGroups[title].roles.add(response.role || '');
+      });
     });
   });
+  const sortedRoles = Object.values(roleGroups).sort((a, b) => b.count - a.count);
 
-  const sortedRoles = Object.values(roleGroups).sort((a, b) => b.personas.length - a.personas.length);
+  // Deduplicate by first word of title to get unique role cards
+  const seenTitles = new Set();
+  const uniqueRoles = sortedRoles.filter(r => {
+    if (seenTitles.has(r.title)) return false;
+    seenTitles.add(r.title);
+    return true;
+  });
+
+  const handleSelectRole = async (roleTitle) => {
+    setSelectedRole(roleTitle);
+    setShowQuotes(false);
+    setOutputMode('bullets');
+
+    // If already synthesized, don't re-fetch
+    if (synthesis[roleTitle]) return;
+
+    setLoadingRole(roleTitle);
+    try {
+      const result = await api.synthesizeRole(simulationId, roleTitle);
+      setSynthesis(prev => ({ ...prev, [roleTitle]: result }));
+    } catch (err) {
+      console.error('Synthesis failed:', err);
+      setSynthesis(prev => ({
+        ...prev,
+        [roleTitle]: {
+          role: roleTitle,
+          synthesis: 'Synthesis failed. The raw quotes are still available below.',
+          bullet_points: [],
+          paragraph: '',
+          key_concerns: [],
+          sentiment_leaning: 'unknown',
+          quotes: [],
+        },
+      }));
+    } finally {
+      setLoadingRole(null);
+    }
+  };
+
+  const copyToClipboard = (text, field) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const currentSynthesis = selectedRole ? synthesis[selectedRole] : null;
+
+  // Collect raw quotes for the selected role
+  const rawQuotes = [];
+  if (selectedRole) {
+    debateTranscript.forEach((table) => {
+      const variant = VARIANT_LABELS[table.variant]?.label || table.variant;
+      (table.rounds || []).forEach((round) => {
+        (round.responses || []).forEach((resp) => {
+          if (resp.title === selectedRole) {
+            rawQuotes.push({
+              persona: resp.persona,
+              role: resp.role,
+              table: variant,
+              round: round.round,
+              response: resp.response,
+            });
+          }
+        });
+      });
+    });
+  }
 
   return (
-    <div className="space-y-4">
-      {sortedRoles.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No role data available</div>
-      ) : (
-        sortedRoles.map((role, idx) => (
-          <div key={idx} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <button
-              onClick={() => setExpandedRole(expandedRole === role.title ? null : role.title)}
-              className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition group"
-            >
-              <div className="flex items-center gap-3">
-                {expandedRole === role.title ? (
-                  <ChevronDown className="h-5 w-5 text-gray-400" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-gray-400" />
+    <div className="space-y-6">
+      {/* Role selector grid */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Select a role to analyze</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {uniqueRoles.map((role) => {
+            const isSelected = selectedRole === role.title;
+            const syn = synthesis[role.title];
+            const sentBadge = syn ? SENTIMENT_BADGE[syn.sentiment_leaning] || SENTIMENT_BADGE.unknown : null;
+            return (
+              <button
+                key={role.title}
+                onClick={() => handleSelectRole(role.title)}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  isSelected
+                    ? 'border-indigo-400 bg-indigo-50 shadow-md ring-2 ring-indigo-200'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="font-semibold text-sm text-gray-900">{role.title}</h4>
+                  {loadingRole === role.title && (
+                    <RefreshCw className="h-3.5 w-3.5 text-indigo-500 animate-spin" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  {role.tables.size} table{role.tables.size !== 1 ? 's' : ''} · {role.count} response{role.count !== 1 ? 's' : ''}
+                </p>
+                {sentBadge && (
+                  <span className={`inline-block mt-2 text-xs font-medium px-2 py-0.5 rounded-full ${sentBadge}`}>
+                    {syn.sentiment_leaning.replace('_', ' ')}
+                  </span>
                 )}
-                <div className="text-left">
-                  <h3 className="font-semibold text-gray-900">{role.title}</h3>
-                  <p className="text-xs text-gray-500">{role.personas.length} persona{role.personas.length !== 1 ? 's' : ''} · {role.tables.size} table{role.tables.size !== 1 ? 's' : ''}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Loading state */}
+      {loadingRole && (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <RefreshCw className="h-8 w-8 text-indigo-400 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500 mb-1">Synthesizing {loadingRole} perspectives...</p>
+          <p className="text-xs text-gray-400">Analyzing quotes across all committee tables</p>
+        </div>
+      )}
+
+      {/* Synthesis results */}
+      {currentSynthesis && !loadingRole && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">{currentSynthesis.role} Perspective</h3>
+                  <p className="text-xs text-gray-500">{currentSynthesis.quote_count} responses analyzed across committees</p>
                 </div>
               </div>
-            </button>
+              {currentSynthesis.sentiment_leaning && (
+                <span className={`text-xs font-medium px-3 py-1 rounded-full ${SENTIMENT_BADGE[currentSynthesis.sentiment_leaning] || SENTIMENT_BADGE.unknown}`}>
+                  {currentSynthesis.sentiment_leaning.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+            <p className="text-gray-700 leading-relaxed">{currentSynthesis.synthesis}</p>
+          </div>
 
-            {expandedRole === role.title && (
-              <div className="border-t border-gray-100 px-5 py-4 bg-gray-50">
-                {/* Synthesis summary */}
-                <div className="mb-5 pb-5 border-b border-gray-200">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Key Positions</p>
-                  <div className="space-y-2">
-                    {role.quotes.slice(0, 2).map((quote, qi) => (
-                      <p key={qi} className="text-sm text-gray-700 italic border-l-2 border-indigo-300 pl-3">
-                        "{quote.response.substring(0, 120)}{quote.response.length > 120 ? '...' : ''}"
-                      </p>
-                    ))}
+          {/* Key Concerns */}
+          {currentSynthesis.key_concerns?.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <h4 className="font-semibold text-sm">Key Concerns from {currentSynthesis.role}s</h4>
+              </div>
+              <div className="space-y-2">
+                {currentSynthesis.key_concerns.map((concern, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold text-xs mt-0.5">{i + 1}</span>
+                    <p className="text-sm text-gray-700">{concern}</p>
                   </div>
-                </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-                {/* Individual quotes */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Individual Responses</p>
-                  <div className="space-y-3">
-                    {role.quotes.map((quote, qi) => (
-                      <div key={qi} className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="flex items-start justify-between mb-1">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{quote.persona}</p>
-                            <p className="text-xs text-gray-400">{quote.table}</p>
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-700">{quote.response}</p>
-                      </div>
-                    ))}
-                  </div>
+          {/* Actionable Output — Toggle between bullets and paragraph */}
+          <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl border border-indigo-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-indigo-600" />
+                <h4 className="font-semibold text-indigo-900">
+                  PitchSim Talking Points — For {currentSynthesis.role}s
+                </h4>
+              </div>
+              <div className="flex items-center gap-1 bg-white/80 rounded-lg p-0.5 border border-indigo-200">
+                <button
+                  onClick={() => setOutputMode('bullets')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${
+                    outputMode === 'bullets'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-indigo-600 hover:bg-indigo-100'
+                  }`}
+                >
+                  Bullet Points
+                </button>
+                <button
+                  onClick={() => setOutputMode('paragraph')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition ${
+                    outputMode === 'paragraph'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-indigo-600 hover:bg-indigo-100'
+                  }`}
+                >
+                  Full Paragraph
+                </button>
+              </div>
+            </div>
+
+            {/* Bullet Points Mode */}
+            {outputMode === 'bullets' && (
+              <div>
+                <div className="space-y-2.5 mb-4">
+                  {(currentSynthesis.bullet_points || []).map((bp, i) => (
+                    <div key={i} className="flex items-start gap-2.5 bg-white/70 rounded-lg p-3">
+                      <Crosshair className="h-4 w-4 text-indigo-500 mt-0.5 shrink-0" />
+                      <p className="text-sm text-gray-800">{bp}</p>
+                    </div>
+                  ))}
                 </div>
+                {currentSynthesis.bullet_points?.length > 0 && (
+                  <button
+                    onClick={() => copyToClipboard(currentSynthesis.bullet_points.map((bp, i) => `${i + 1}. ${bp}`).join('\n'), 'bullets')}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition"
+                  >
+                    {copiedField === 'bullets' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedField === 'bullets' ? 'Copied to clipboard' : 'Copy all bullet points'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Paragraph Mode */}
+            {outputMode === 'paragraph' && (
+              <div>
+                <div className="bg-white/70 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {currentSynthesis.paragraph || 'No paragraph available.'}
+                  </p>
+                </div>
+                {currentSynthesis.paragraph && (
+                  <button
+                    onClick={() => copyToClipboard(currentSynthesis.paragraph, 'paragraph')}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition"
+                  >
+                    {copiedField === 'paragraph' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedField === 'paragraph' ? 'Copied to clipboard' : 'Copy paragraph'}
+                  </button>
+                )}
               </div>
             )}
           </div>
-        ))
+
+          {/* Select Quotes */}
+          {currentSynthesis.quotes?.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="font-semibold text-sm mb-3">Representative Quotes</h4>
+              <div className="space-y-3">
+                {currentSynthesis.quotes.map((q, i) => (
+                  <div key={i} className="border-l-2 border-indigo-300 pl-4">
+                    <p className="text-sm text-gray-700 italic">"{q.excerpt || q.quote || q}"</p>
+                    <p className="text-xs text-gray-400 mt-1">{q.persona} · {q.table_variant || q.table}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Raw Quotes (collapsible) */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => setShowQuotes(!showQuotes)}
+              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"
+            >
+              <div className="flex items-center gap-2">
+                {showQuotes ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                <span className="text-sm font-medium text-gray-600">All Raw Responses ({rawQuotes.length})</span>
+              </div>
+            </button>
+            {showQuotes && (
+              <div className="border-t border-gray-100 p-4 space-y-3 max-h-96 overflow-y-auto">
+                {rawQuotes.map((q, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium">{q.persona}</span>
+                      <span className="text-xs text-gray-400">· {q.table} · {q.round.replace('_', ' ')}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">{q.role}</span>
+                    </div>
+                    <p className="text-sm text-gray-700">{q.response}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state when no role selected */}
+      {!selectedRole && !loadingRole && (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Select a role above to see synthesized insights and talking points</p>
+        </div>
       )}
     </div>
   );
@@ -853,7 +1076,7 @@ export default function SimulationResults() {
             )}
 
             {/* ─── BY ROLE TAB ─── */}
-            {tab === 'by_role' && <ByRoleTab debateTranscript={debateTranscript} />}
+            {tab === 'by_role' && <ByRoleTab debateTranscript={debateTranscript} simulationId={id} />}
 
             {/* ─── COMMITTEE DEBATES TAB ─── */}
             {tab === 'debates' && (

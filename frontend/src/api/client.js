@@ -42,6 +42,18 @@ class ApiClient {
     return this.request(`/simulations/${id}/responses`);
   }
 
+  // Role Synthesis
+  async getSimulationRoles(id) {
+    return this.request(`/simulations/${id}/roles`);
+  }
+
+  async synthesizeRole(id, role) {
+    return this.request(`/simulations/${id}/synthesize-role`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+  }
+
   // Personas
   async listPersonas(params = {}) {
     const query = new URLSearchParams(params).toString();
