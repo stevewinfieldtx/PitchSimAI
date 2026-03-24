@@ -165,6 +165,7 @@ async def run_swarm_simulation(
                 **(sim.config or {}),
                 "engine": "pitchsim_swarm",
                 "swarm_scores": scores,
+                "consensus": consensus,  # Full consensus with structured data
                 "deal_prediction": consensus.get("deal_prediction", {}),
                 "best_pitch_approach": consensus.get("best_pitch_approach", ""),
                 "cross_table_insights": swarm_result.get("cross_table_insights", {}),

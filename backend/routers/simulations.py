@@ -149,10 +149,13 @@ async def get_simulation(
 
     # Include swarm-specific data if available
     if config.get("engine") == "pitchsim_swarm":
+        response["swarm_scores"] = config.get("swarm_scores", {})
+        response["consensus"] = config.get("consensus", {})
         response["deal_prediction"] = config.get("deal_prediction", {})
         response["best_pitch_approach"] = config.get("best_pitch_approach", "")
         response["cross_table_insights"] = config.get("cross_table_insights", {})
         response["debate_transcript"] = config.get("debate_transcript", [])
+        response["metadata"] = config.get("metadata", {})
 
     return response
 
