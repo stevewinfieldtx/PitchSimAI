@@ -130,6 +130,13 @@ async def get_simulation(
         "started_at": sim.started_at,
         "completed_at": sim.completed_at,
         "engine": config.get("engine", "unknown"),
+        "config": {
+            "num_tables": config.get("num_tables", 3),
+            "personas_per_table": config.get("personas_per_table", 5),
+            "debate_rounds": config.get("debate_rounds", 2),
+        },
+        "progress_stage": config.get("swarm_stage", ""),
+        "progress_detail": config.get("swarm_detail", ""),
     }
 
     if sim.results:

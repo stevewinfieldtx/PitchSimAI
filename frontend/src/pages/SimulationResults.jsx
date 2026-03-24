@@ -7,6 +7,7 @@ import {
   Clock, CheckCircle2, XCircle, AlertCircle, Crosshair, BarChart3,
   Sparkles, Eye, ThumbsUp, ThumbsDown, Scale, Copy, Check
 } from 'lucide-react';
+import SwarmVisualization from '../components/SwarmVisualization';
 
 // ─── Outcome color schemes ───
 const OUTCOME_STYLES = {
@@ -278,17 +279,35 @@ export default function SimulationResults() {
         </div>
       </div>
 
-      {/* Running State */}
+      {/* Running State — Animated Swarm Visualization */}
       {isRunning && (
-        <div className="bg-white p-8 rounded-xl border border-gray-200 text-center">
-          <div className="relative mx-auto w-20 h-20 mb-4">
-            <RefreshCw className="h-12 w-12 text-indigo-400 mx-auto animate-spin absolute inset-0 m-auto" />
+        <div className="bg-white p-6 rounded-xl border border-gray-200">
+          <div className="text-center mb-4">
+            <h2 className="text-lg font-semibold mb-1">Swarm Deliberation in Progress</h2>
+            <p className="text-gray-500 text-sm">{sim.progress_detail || 'Committees are evaluating your pitch...'}</p>
+            {sim.progress_stage && <p className="text-gray-400 text-xs mt-0.5">{sim.progress_stage}</p>}
           </div>
-          <h2 className="text-lg font-semibold mb-1">Swarm Deliberation in Progress</h2>
-          <p className="text-gray-500 mb-1 text-sm">{sim.progress_detail || 'Committees are evaluating your pitch...'}</p>
-          <p className="text-gray-400 mb-4 text-xs">{sim.progress_stage || ''}</p>
-          <div className="w-full max-w-md mx-auto bg-gray-100 rounded-full h-3">
-            <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-3 rounded-full transition-all duration-500" style={{ width: `${sim.progress_pct}%` }} />
+
+          {/* The animated particle visualization */}
+          <div className="flex justify-center mb-5">
+            <SwarmVisualization
+              numTables={sim.config?.num_tables || 3}
+              personasPerTable={sim.config?.personas_per_table || 5}
+              progressPct={sim.progress_pct || 0}
+              width={560}
+              height={340}
+            />
+          </div>
+
+          {/* Progress bar */}
+          <div className="max-w-md mx-auto">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span>Progress</span>
+              <span>{sim.progress_pct}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${sim.progress_pct}%` }} />
+            </div>
           </div>
         </div>
       )}
