@@ -22,8 +22,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="AI-powered sales pitch simulation platform",
-    version="0.1.0",
+    description="AI-powered sales pitch simulation platform with multi-agent deliberation",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -45,7 +45,7 @@ app.include_router(committee.router, prefix="/api/committee", tags=["Buying Comm
 async def health_check():
     """
     Health check endpoint. Must respond FAST — Railway uses this to determine
-    if the service is alive. MiroFish status is checked separately.
+    if the service is alive.
     """
     from services.model_pool import get_model_pool
     pool = get_model_pool()
@@ -53,7 +53,8 @@ async def health_check():
     return {
         "status": "healthy",
         "app": settings.app_name,
-        "version": "0.2.0",
+        "version": "0.3.0",
+        "engine": "pitchsim_swarm",
         "models_configured": len(pool.models),
         "model_ids": list(pool.models.keys()),
     }
@@ -61,23 +62,25 @@ async def health_check():
 
 @app.get("/api/health/full")
 async def health_check_full():
-    """Extended health check including MiroFish status (may take 2-3s)."""
+    """Extended health check with engine and model pool details."""
     from services.model_pool import get_model_pool
-    from services.mirofish import get_mirofish_client
 
     pool = get_model_pool()
-    mf_client = get_mirofish_client()
-    mf_healthy = await mf_client.health_check()
 
     return {
         "status": "healthy",
         "app": settings.app_name,
-        "version": "0.2.0",
-        "engine": "mirofish" if mf_healthy else "model_pool_fallback",
-        "mirofish_available": mf_healthy,
-        "mirofish_url": settings.mirofish_api_url,
+        "version": "0.3.0",
+        "engine": "pitchsim_swarm",
+        "engine_description": "Multi-agent buying committee deliberation",
+        "swarm_config": {
+            "default_tables": settings.swarm_default_tables,
+            "default_personas_per_table": settings.swarm_default_personas_per_table,
+            "default_debate_rounds": settings.swarm_default_debate_rounds,
+        },
         "models_configured": len(pool.models),
         "model_ids": list(pool.models.keys()),
+        "model_pool_available": pool.is_available,
     }
 
 

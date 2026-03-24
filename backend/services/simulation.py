@@ -1,3 +1,13 @@
+"""
+Simulation Service
+===================
+Orchestrates pitch simulations using the PitchSim Swarm Engine.
+
+The Swarm Engine creates multiple buying committee "tables", runs them through
+multi-round deliberation (react → debate → cross-table → consensus), and
+produces rich, actionable feedback.
+"""
+
 import json
 import logging
 import random
@@ -12,61 +22,39 @@ from config import get_settings
 from database import async_session
 from models import Simulation, Persona, SimulationResult, PersonaResponse
 from services.model_pool import get_model_pool
-from services.mirofish import (
-    get_mirofish_orchestrator,
-    get_mirofish_client,
-    SimulationStatus,
-)
+from services.swarm_engine import get_swarm_engine
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
-# MiroFish-Powered Simulation (Primary Engine)
+# Swarm Engine Simulation (Primary)
 # ──────────────────────────────────────────────
 
 
-async def run_mirofish_simulation(
+async def run_swarm_simulation(
     simulation_id: str,
     pitch_content: str,
+    industry: str = "technology",
+    company_name: str = "",
+    company_size: str = "mid-market",
+    target_audience: str = "",
+    num_tables: int = 3,
+    personas_per_table: int = 5,
+    debate_rounds: int = 2,
     personas: Optional[List[Dict[str, Any]]] = None,
-    num_agents: int = 50,
-    num_rounds: int = 20,
 ):
     """
-    Run a pitch simulation using MiroFish's swarm intelligence engine.
+    Run a pitch simulation using the PitchSim Swarm Engine.
 
-    This is the PRIMARY simulation method. MiroFish spawns autonomous AI agents
-    that interact with each other in a social simulation, producing far richer
-    and more realistic buyer behavior than individual LLM calls.
-
-    Falls back to the legacy model_pool approach if MiroFish is unavailable.
+    This is the PRIMARY simulation method. It creates multiple buying
+    committees that debate the pitch and reach consensus.
     """
-    orchestrator = get_mirofish_orchestrator()
-    client = get_mirofish_client()
+    engine = get_swarm_engine()
 
     async with async_session() as db:
         try:
-            # Check MiroFish availability
-            mirofish_available = await client.health_check()
-
-            if not mirofish_available:
-                logger.warning(
-                    "MiroFish not available — falling back to model pool simulation"
-                )
-                # Fall back to legacy simulation
-                persona_ids = None
-                if personas:
-                    # Try to find matching personas in DB
-                    persona_ids = [str(p["id"]) for p in personas if "id" in p]
-                await run_simulation(
-                    simulation_id, pitch_content,
-                    num_personas=num_agents,
-                    persona_ids=persona_ids or None,
-                )
-                return
-
             # Update simulation status
             result = await db.execute(
                 select(Simulation).where(Simulation.id == UUID(simulation_id))
@@ -76,108 +64,128 @@ async def run_mirofish_simulation(
             sim.started_at = datetime.utcnow()
             sim.config = {
                 **(sim.config or {}),
-                "engine": "mirofish",
-                "num_agents": num_agents,
-                "num_rounds": num_rounds,
+                "engine": "pitchsim_swarm",
+                "num_tables": num_tables,
+                "personas_per_table": personas_per_table,
+                "debate_rounds": debate_rounds,
             }
             await db.commit()
 
-            # Status callback to update progress in DB
-            async def update_progress(status: str, detail: str = ""):
+            # Use sim fields if not provided
+            industry = sim.industry or industry
+            company_name = sim.company_name or company_name
+            target_audience = sim.target_audience or target_audience
+
+            # Progress callback to update DB
+            async def update_progress(stage: str, detail: str = "", pct: int = 0):
                 async with async_session() as progress_db:
                     r = await progress_db.execute(
                         select(Simulation).where(Simulation.id == UUID(simulation_id))
                     )
                     s = r.scalar_one()
-                    status_to_pct = {
-                        SimulationStatus.GRAPH_BUILDING.value: 15,
-                        SimulationStatus.PREPARING_AGENTS.value: 30,
-                        SimulationStatus.RUNNING.value: 60,
-                        SimulationStatus.GENERATING_REPORT.value: 85,
-                        SimulationStatus.COMPLETED.value: 100,
-                    }
-                    s.progress_pct = status_to_pct.get(status, s.progress_pct)
+                    s.progress_pct = pct
                     s.config = {
                         **(s.config or {}),
-                        "mirofish_status": status,
-                        "mirofish_detail": detail,
+                        "swarm_stage": stage,
+                        "swarm_detail": detail,
                     }
                     await progress_db.commit()
 
-            # Run the full MiroFish pipeline
-            mf_result = await orchestrator.run_pitch_simulation(
-                pitch_text=pitch_content,
-                prediction_goal=(
-                    f"Predict how a buying committee in {sim.industry or 'technology'} "
-                    f"would react to this {sim.company_name or 'product'} pitch. "
-                    f"Target audience: {sim.target_audience or 'business decision makers'}."
-                ),
-                personas=personas,
-                num_agents=num_agents,
-                num_rounds=num_rounds,
-                status_callback=update_progress,
+            # Run the swarm deliberation
+            swarm_result = await engine.run(
+                pitch_content=pitch_content,
+                industry=industry,
+                company_name=company_name,
+                company_size=company_size,
+                target_audience=target_audience,
+                num_tables=num_tables,
+                personas_per_table=personas_per_table,
+                debate_rounds=debate_rounds,
+                existing_personas=personas,
+                progress_callback=update_progress,
             )
 
-            if mf_result.get("status") == SimulationStatus.FAILED.value:
-                raise RuntimeError(
-                    f"MiroFish simulation failed: {mf_result.get('error', 'Unknown error')}"
+            # Extract scores from consensus
+            consensus = swarm_result.get("consensus", {})
+            scores = consensus.get("scores", {})
+
+            # Extract objections and recommendations
+            top_objections = [
+                obj.get("objection", str(obj)) if isinstance(obj, dict) else str(obj)
+                for obj in consensus.get("top_objections", [])
+            ]
+            recommendations = [
+                rec.get("action", str(rec)) if isinstance(rec, dict) else str(rec)
+                for rec in consensus.get("recommendations", [])
+            ]
+            strengths = [
+                s.get("strength", str(s)) if isinstance(s, dict) else str(s)
+                for s in consensus.get("top_strengths", [])
+            ]
+
+            # Build sentiment breakdown from table scores
+            sentiment_breakdown = {}
+            for table_data in swarm_result.get("tables", []):
+                table_scores = table_data.get("scores", {})
+                verdict = "positive" if table_scores.get("sentiment", 50) > 60 else (
+                    "negative" if table_scores.get("sentiment", 50) < 40 else "neutral"
                 )
+                sentiment_breakdown[table_data.get("variant", "unknown")] = {
+                    "verdict": verdict,
+                    "engagement": table_scores.get("engagement", 0),
+                    "sentiment": table_scores.get("sentiment", 0),
+                    "deal_probability": table_scores.get("deal_probability", 0),
+                }
 
-            # Store MiroFish results in our database
-            scores = mf_result.get("scores", {})
-
+            # Store results
             sim_result = SimulationResult(
                 simulation_id=UUID(simulation_id),
-                overall_engagement_score=scores.get("engagement_score", 0),
-                overall_sentiment_score=scores.get("sentiment_score", 0),
-                sentiment_breakdown={
-                    "positive": scores.get("champion_count", 0),
-                    "negative": scores.get("objection_count", 0),
-                    "total_interactions": scores.get("total_interactions", 0),
+                overall_engagement_score=scores.get("overall_engagement", 0),
+                overall_sentiment_score=scores.get("overall_sentiment", 0),
+                sentiment_breakdown=sentiment_breakdown,
+                key_objections=top_objections[:10],
+                objection_frequency={
+                    "total": len(top_objections),
+                    "cross_table": len(swarm_result.get("cross_table_insights", {}).get("universal_objections", [])),
                 },
-                key_objections=scores.get("top_objections", []),
-                objection_frequency={"total": scores.get("objection_count", 0)},
-                key_recommendations=[],  # Will be populated from report
-                strongest_segments=[],
+                key_recommendations=recommendations[:10],
+                strongest_segments=strengths[:5],
                 weakest_segments=[],
-                engagement_by_industry={sim.industry or "general": scores.get("engagement_score", 0)},
-                next_steps_suggested="",
+                engagement_by_industry={industry: scores.get("overall_engagement", 0)},
+                next_steps_suggested=consensus.get("executive_summary", ""),
             )
-
-            # Extract recommendations from MiroFish report
-            report = mf_result.get("report", {})
-            if report:
-                sim_result.key_recommendations = _extract_recommendations_from_report(report)
-                sim_result.next_steps_suggested = _extract_next_steps_from_report(report)
-
             db.add(sim_result)
 
-            # Store MiroFish IDs for later chat/interaction
+            # Update simulation with full results
             r2 = await db.execute(
                 select(Simulation).where(Simulation.id == UUID(simulation_id))
             )
             sim = r2.scalar_one()
             sim.config = {
                 **(sim.config or {}),
-                "engine": "mirofish",
-                "mirofish_project_id": mf_result.get("project_id"),
-                "mirofish_simulation_id": mf_result.get("simulation_id"),
-                "mirofish_report_id": mf_result.get("report_id"),
-                "mirofish_scores": scores,
-                "deal_probability": scores.get("deal_probability", 0),
+                "engine": "pitchsim_swarm",
+                "swarm_scores": scores,
+                "deal_prediction": consensus.get("deal_prediction", {}),
+                "best_pitch_approach": consensus.get("best_pitch_approach", ""),
+                "cross_table_insights": swarm_result.get("cross_table_insights", {}),
+                "metadata": swarm_result.get("metadata", {}),
+                # Store full debate for the UI to render
+                "debate_transcript": swarm_result.get("tables", []),
             }
             sim.status = "completed"
             sim.completed_at = datetime.utcnow()
             sim.progress_pct = 100
             await db.commit()
 
+            dp = consensus.get("deal_prediction", {})
             logger.info(
-                f"MiroFish simulation {simulation_id} completed — "
-                f"deal probability: {scores.get('deal_probability', 0)}%"
+                f"Swarm simulation {simulation_id} completed — "
+                f"deal prediction: {dp.get('outcome', 'unknown')} "
+                f"({dp.get('confidence', 0)}% confidence)"
             )
 
         except Exception as e:
-            logger.error(f"MiroFish simulation {simulation_id} failed: {e}", exc_info=True)
+            logger.error(f"Swarm simulation {simulation_id} failed: {e}", exc_info=True)
             async with async_session() as error_db:
                 r = await error_db.execute(
                     select(Simulation).where(Simulation.id == UUID(simulation_id))
@@ -189,78 +197,8 @@ async def run_mirofish_simulation(
                 await error_db.commit()
 
 
-def _extract_recommendations_from_report(report: Dict[str, Any]) -> List[str]:
-    """Pull actionable recommendations from MiroFish's report agent output."""
-    recommendations = []
-    logs = report.get("logs", report.get("data", []))
-    if isinstance(logs, list):
-        for entry in logs:
-            content = entry.get("content", "") if isinstance(entry, dict) else str(entry)
-            if any(kw in content.lower() for kw in ["recommend", "suggest", "improve", "consider"]):
-                # Extract the relevant sentence
-                for sentence in content.split(". "):
-                    if any(kw in sentence.lower() for kw in ["recommend", "suggest", "improve", "consider"]):
-                        recommendations.append(sentence.strip().rstrip(".") + ".")
-                        if len(recommendations) >= 5:
-                            break
-    return recommendations[:5] if recommendations else ["Review simulation report for detailed analysis."]
-
-
-def _extract_next_steps_from_report(report: Dict[str, Any]) -> str:
-    """Pull next steps summary from MiroFish report."""
-    logs = report.get("logs", report.get("data", []))
-    if isinstance(logs, list):
-        for entry in reversed(logs):
-            content = entry.get("content", "") if isinstance(entry, dict) else str(entry)
-            if "next" in content.lower() or "action" in content.lower():
-                return content[:500]
-    return "Review the full simulation report for detailed next steps and agent interactions."
-
-
 # ──────────────────────────────────────────────
-# MiroFish Agent Chat (Post-Simulation)
-# ──────────────────────────────────────────────
-
-
-async def chat_with_mirofish_agent(
-    simulation_config: Dict[str, Any],
-    agent_id: str,
-    message: str,
-) -> str:
-    """Chat with a simulated buyer agent via MiroFish's deep interaction feature."""
-    mf_sim_id = simulation_config.get("mirofish_simulation_id")
-    if not mf_sim_id:
-        return "This simulation was not run with MiroFish. Use the standard chat."
-
-    client = get_mirofish_client()
-    try:
-        result = await client.chat_with_agent(mf_sim_id, agent_id, message)
-        return result.get("response", result.get("content", str(result)))
-    except Exception as e:
-        logger.error(f"MiroFish agent chat failed: {e}")
-        return f"Unable to reach the simulated buyer right now. Error: {e}"
-
-
-async def chat_with_mirofish_analyst(
-    simulation_config: Dict[str, Any],
-    message: str,
-) -> str:
-    """Chat with MiroFish's ReportAgent for deal analysis."""
-    report_id = simulation_config.get("mirofish_report_id")
-    if not report_id:
-        return "No MiroFish report available for this simulation."
-
-    client = get_mirofish_client()
-    try:
-        result = await client.chat_with_report(report_id, message)
-        return result.get("response", result.get("content", str(result)))
-    except Exception as e:
-        logger.error(f"MiroFish analyst chat failed: {e}")
-        return f"Unable to reach the analyst right now. Error: {e}"
-
-
-# ──────────────────────────────────────────────
-# Legacy Model Pool Simulation (Fallback)
+# Legacy: Individual Persona Simulation (Fallback)
 # ──────────────────────────────────────────────
 
 
@@ -281,17 +219,15 @@ async def run_simulation(
     num_personas: int = 10,
     persona_ids: Optional[List[str]] = None,
 ):
-    """Run a full pitch simulation against selected personas using the model pool."""
+    """Run a pitch simulation against individual personas (legacy fallback)."""
     async with async_session() as db:
         try:
-            # Update status to running
             result = await db.execute(select(Simulation).where(Simulation.id == UUID(simulation_id)))
             sim = result.scalar_one()
             sim.status = "running"
             sim.started_at = datetime.utcnow()
             await db.commit()
 
-            # Select personas: by explicit IDs or by filters
             if persona_ids:
                 persona_uuids = [UUID(pid) for pid in persona_ids]
                 query = select(Persona).where(Persona.id.in_(persona_uuids))
@@ -329,7 +265,6 @@ async def run_simulation(
                     await db.commit()
                 return persona, response_data
 
-            # Run all personas concurrently — the model pool semaphores handle rate limiting
             tasks = [process_persona(p) for p in personas]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -338,7 +273,7 @@ async def run_simulation(
 
             for item in results_list:
                 if isinstance(item, Exception):
-                    print(f"Persona simulation failed: {item}")
+                    logger.error(f"Persona simulation failed: {item}")
                     continue
                 persona, response_data = item
 
@@ -359,7 +294,6 @@ async def run_simulation(
                 all_responses.append(response_data)
                 ordered_personas.append(persona)
 
-            # Generate aggregate results
             agg = aggregate_results(all_responses, ordered_personas)
 
             sim_result = SimulationResult(
@@ -377,15 +311,14 @@ async def run_simulation(
             )
             db.add(sim_result)
 
-            # Store model pool stats in sim config for observability
-            sim.config = {**(sim.config or {}), "model_stats": pool.get_stats()}
+            sim.config = {**(sim.config or {}), "engine": "legacy_pool", "model_stats": pool.get_stats()}
             sim.status = "completed"
             sim.completed_at = datetime.utcnow()
             sim.progress_pct = 100
             await db.commit()
 
         except Exception as e:
-            print(f"Simulation {simulation_id} failed: {e}")
+            logger.error(f"Simulation {simulation_id} failed: {e}", exc_info=True)
             async with async_session() as error_db:
                 result = await error_db.execute(select(Simulation).where(Simulation.id == UUID(simulation_id)))
                 sim = result.scalar_one()
@@ -400,7 +333,6 @@ async def simulate_persona_response(
     pool=None,
 ) -> Dict[str, Any]:
     """Simulate a single persona's response using the model pool."""
-
     if pool is None:
         pool = get_model_pool()
 
@@ -410,14 +342,8 @@ async def simulate_persona_response(
         return _mock_simulate(persona, pitch_content)
 
 
-async def _llm_simulate(
-    persona: Persona,
-    pitch_content: str,
-    pool,
-) -> Dict[str, Any]:
+async def _llm_simulate(persona: Persona, pitch_content: str, pool) -> Dict[str, Any]:
     """Use the model pool to generate a realistic persona response."""
-
-    # Route high-value personas to premium models
     tier = "premium" if _is_high_value_persona(persona) else "volume"
 
     system_prompt = f"""You are simulating a buyer persona for a sales pitch evaluation.
@@ -458,23 +384,19 @@ Evaluate the following sales pitch AS THIS PERSONA. Respond with valid JSON only
             temperature=0.8,
             response_format={"type": "json_object"},
         )
-
         result = json.loads(content)
         result["_model_used"] = model_used
         result["_tier"] = tier
         return result
     except Exception as e:
-        print(f"LLM simulation failed for {persona.name}: {e}")
+        logger.error(f"LLM simulation failed for {persona.name}: {e}")
         return _mock_simulate(persona, pitch_content)
 
 
 def _mock_simulate(persona: Persona, pitch_content: str) -> Dict[str, Any]:
     """Generate a mock persona response for testing without an LLM API key."""
-
-    # Weight based on persona traits
     skepticism = persona.personality_traits.get("skepticism", 0.5) if persona.personality_traits else 0.5
     openness = persona.personality_traits.get("innovation_openness", 0.5) if persona.personality_traits else 0.5
-
     engagement = max(10, min(100, int(60 + (openness - skepticism) * 40 + random.gauss(0, 10))))
 
     if engagement > 75:
@@ -496,7 +418,6 @@ def _mock_simulate(persona: Persona, pitch_content: str) -> Dict[str, Any]:
         "Need to see more case studies in our industry",
         "Integration with existing tools is unclear",
     ]
-
     question_pool = [
         f"How does this work for {persona.industry} specifically?",
         "What's the typical onboarding timeline?",
@@ -508,12 +429,11 @@ def _mock_simulate(persona: Persona, pitch_content: str) -> Dict[str, Any]:
 
     selected_objections = random.sample(objection_pool, k=random.randint(1, 3))
     selected_questions = random.sample(question_pool, k=random.randint(1, 3))
-
     categories = ["pricing", "technical", "roi", "competitive", "security", "implementation"]
     selected_categories = random.sample(categories, k=len(selected_objections))
 
     return {
-        "initial_reaction": f"As a {persona.title} in {persona.industry}, my first impression is that this pitch {'shows promise' if engagement > 60 else 'needs more work'}. {'I can see potential value for our team.' if engagement > 70 else 'I have several questions before I could consider moving forward.'}",
+        "initial_reaction": f"As a {persona.title} in {persona.industry}, my first impression is that this pitch {'shows promise' if engagement > 60 else 'needs more work'}.",
         "sentiment": sentiment,
         "engagement_score": engagement,
         "questions_raised": selected_questions,
@@ -529,15 +449,12 @@ def _mock_simulate(persona: Persona, pitch_content: str) -> Dict[str, Any]:
 
 def aggregate_results(responses: List[Dict], personas: list) -> Dict[str, Any]:
     """Aggregate individual persona responses into simulation results."""
-
     if not responses:
         return {}
 
-    # Engagement
     engagement_scores = [r["engagement_score"] for r in responses]
     overall_engagement = sum(engagement_scores) / len(engagement_scores)
 
-    # Sentiment
     sentiment_map = {"very_positive": 2, "positive": 1, "neutral": 0, "negative": -1, "very_negative": -2}
     sentiment_scores = [sentiment_map.get(r["sentiment"], 0) for r in responses]
     overall_sentiment = (sum(sentiment_scores) / len(sentiment_scores)) * 50
@@ -547,7 +464,6 @@ def aggregate_results(responses: List[Dict], personas: list) -> Dict[str, Any]:
         s = r["sentiment"]
         sentiment_breakdown[s] = sentiment_breakdown.get(s, 0) + 1
 
-    # Objections
     all_objections = []
     objection_freq = {}
     for r in responses:
@@ -557,7 +473,6 @@ def aggregate_results(responses: List[Dict], personas: list) -> Dict[str, Any]:
 
     unique_objections = list(set(all_objections))[:10]
 
-    # Engagement by industry
     industry_scores = {}
     industry_counts = {}
     for r, p in zip(responses, personas):
@@ -570,21 +485,12 @@ def aggregate_results(responses: List[Dict], personas: list) -> Dict[str, Any]:
         for ind in industry_scores
     }
 
-    segments = []
-    for ind in engagement_by_industry:
-        segments.append({
-            "industry": ind,
-            "engagement_score": engagement_by_industry[ind],
-        })
+    segments = [
+        {"industry": ind, "engagement_score": engagement_by_industry[ind]}
+        for ind in engagement_by_industry
+    ]
     segments.sort(key=lambda x: x["engagement_score"], reverse=True)
 
-    # Model distribution stats
-    model_usage = {}
-    for r in responses:
-        model = r.get("_model_used", "unknown")
-        model_usage[model] = model_usage.get(model, 0) + 1
-
-    # Recommendations
     recommendations = []
     if objection_freq.get("pricing", 0) > len(responses) * 0.3:
         recommendations.append("Address pricing concerns upfront with ROI framework")
@@ -611,7 +517,6 @@ def aggregate_results(responses: List[Dict], personas: list) -> Dict[str, Any]:
         "strongest_segments": segments[:3],
         "weakest_segments": segments[-3:] if len(segments) > 3 else [],
         "engagement_by_industry": engagement_by_industry,
-        "model_distribution": model_usage,
         "next_steps_suggested": "Review top objections and iterate on messaging for weakest segments.",
     }
 
@@ -621,8 +526,7 @@ async def generate_persona_chat_response(
     pitch_content: str,
     conversation_history: List[Dict],
 ) -> str:
-    """Generate a chat response as a specific persona. Uses premium model for chat quality."""
-
+    """Generate a chat response as a specific persona."""
     pool = get_model_pool()
 
     if pool.is_available:
@@ -632,9 +536,8 @@ Buying style: {persona.buying_style}
 Pain points: {', '.join(persona.pain_points or [])}
 Bio: {persona.bio or 'N/A'}
 
-You were presented with this sales pitch and are now in a follow-up conversation with the sales rep.
-Stay in character. Be authentic to your persona's concerns and communication style.
-Keep responses conversational (2-4 sentences).
+You were presented with this sales pitch and are now in a follow-up conversation.
+Stay in character. Be authentic. Keep responses conversational (2-4 sentences).
 
 ORIGINAL PITCH:
 {pitch_content}"""
@@ -646,13 +549,13 @@ ORIGINAL PITCH:
 
         try:
             content, _ = await pool.call_with_failover(
-                tier="premium",  # always use premium for interactive chat
+                tier="premium",
                 messages=messages,
                 temperature=0.8,
                 max_tokens=300,
             )
             return content
         except Exception:
-            return f"I appreciate you reaching out. As a {persona.title}, I'd need to see more concrete evidence before moving forward. Can you share some case studies from the {persona.industry} space?"
+            return f"I appreciate you reaching out. As a {persona.title}, I'd need to see more concrete evidence before moving forward."
 
-    return f"That's an interesting point. As someone in {persona.industry}, I'm particularly focused on {(persona.pain_points or ['value delivery'])[0]}. Can you speak more to how your solution addresses that?"
+    return f"That's an interesting point. As someone in {persona.industry}, I'm particularly focused on {(persona.pain_points or ['value delivery'])[0]}."

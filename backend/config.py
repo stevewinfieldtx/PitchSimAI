@@ -30,16 +30,12 @@ class Settings(BaseSettings):
     # Redis (for Celery task queue)
     redis_url: str = "redis://localhost:6379/0"
 
-    # MiroFish — Swarm Intelligence Simulation Engine
-    # This is the core simulation backend. PitchSimAI sends pitches to MiroFish,
-    # which spawns thousands of autonomous AI buyer agents that interact and
-    # produce realistic buying committee dynamics.
-    # Set USE_MIROFISH=true once MiroFish is deployed as a Railway service.
-    use_mirofish: bool = True           # MiroFish is the core engine
-    mirofish_api_url: str = "http://localhost:5001"
-    mirofish_num_agents: int = 50       # Default agents per simulation
-    mirofish_num_rounds: int = 20       # Default interaction rounds
-    mirofish_timeout: float = 300.0     # Max wait per API call (seconds)
+    # PitchSim Swarm Engine — Multi-Agent Deliberation
+    # Creates multiple buying committees that debate pitches and reach consensus.
+    # No external dependencies — runs entirely on the OpenRouter model pool.
+    swarm_default_tables: int = 3           # Number of committee tables per simulation
+    swarm_default_personas_per_table: int = 5  # Personas per committee
+    swarm_default_debate_rounds: int = 2    # Debate rounds per committee
 
     # Simulation defaults
     default_num_personas: int = 10
