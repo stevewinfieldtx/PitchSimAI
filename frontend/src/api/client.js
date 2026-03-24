@@ -119,6 +119,29 @@ class ApiClient {
     return this.request('/committee/industries');
   }
 
+  // AutoOptimizer
+  async startOptimization(data) {
+    return this.request('/optimizer/start', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async optimizeFromSimulation(data) {
+    return this.request('/optimizer/from-simulation', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getOptimizationStatus(jobId) {
+    return this.request(`/optimizer/status/${jobId}`);
+  }
+
+  async listOptimizationJobs() {
+    return this.request('/optimizer/jobs');
+  }
+
   // Health & Engine Status
   async healthCheck() {
     return this.request('/health/full');

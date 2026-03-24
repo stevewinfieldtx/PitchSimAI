@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import init_db
-from routers import simulations, personas, chat, committee
+from routers import simulations, personas, chat, committee, optimizer
 
 settings = get_settings()
 
@@ -39,6 +39,7 @@ app.include_router(simulations.router, prefix="/api/simulations", tags=["Simulat
 app.include_router(personas.router, prefix="/api/personas", tags=["Personas"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(committee.router, prefix="/api/committee", tags=["Buying Committee"])
+app.include_router(optimizer.router, prefix="/api/optimizer", tags=["AutoOptimizer"])
 
 
 @app.get("/api/health")

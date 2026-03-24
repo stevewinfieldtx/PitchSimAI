@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Plus, Users, Zap, UserPlus } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, Zap, UserPlus, RefreshCw } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
@@ -8,6 +8,7 @@ export default function Layout() {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/new', label: 'New Simulation', icon: Plus },
     { path: '/committee', label: 'Buying Committee', icon: UserPlus },
+    { path: '/optimizer', label: 'AutoOptimizer', icon: RefreshCw },
     { path: '/personas', label: 'Persona Library', icon: Users },
   ];
 

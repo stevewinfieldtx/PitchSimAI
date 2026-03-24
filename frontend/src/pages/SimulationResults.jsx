@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { ArrowLeft, MessageSquare, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Lightbulb } from 'lucide-react';
+import { ArrowLeft, MessageSquare, RefreshCw, TrendingUp, TrendingDown, AlertTriangle, Lightbulb, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const SENTIMENT_COLORS = {
@@ -77,12 +77,23 @@ export default function SimulationResults() {
             {sim.num_personas} personas · {new Date(sim.created_at).toLocaleString()}
           </p>
         </div>
-        {isRunning && (
-          <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            <span className="font-medium">{sim.progress_pct}% complete</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isRunning && (
+            <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span className="font-medium">{sim.progress_pct}% complete</span>
+            </div>
+          )}
+          {sim.status === 'completed' && (
+            <Link
+              to={`/optimizer?simulation=${id}`}
+              className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition text-sm shadow-sm"
+            >
+              <Zap className="h-4 w-4" />
+              AutoOptimize This Pitch
+            </Link>
+          )}
+        </div>
       </div>
 
       {isRunning && (
