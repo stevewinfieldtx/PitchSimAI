@@ -156,6 +156,44 @@ The ROI:
 Don't let your business outrun your systems. See SAP Business One in a personalized demo with YOUR data.`,
     },
   },
+  {
+    label: 'NCC Group',
+    color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100',
+    data: {
+      pitch_title: 'NCC Group — Technical Assurance & Penetration Testing',
+      company_name: 'NCC Group',
+      industry: 'Cybersecurity',
+      target_audience: 'CISOs, VPs of Engineering, and security teams at enterprise and regulated industries',
+      pitch_content: `NCC Group — Technical Assurance Services: Penetration Testing & Security Assessment
+
+Your security posture is only as strong as your weakest link. Compliance reports and vulnerability scans tell you what's broken, but they don't tell you if attackers can actually exploit those weaknesses in your environment.
+
+NCC Group's Technical Assurance Services provide independent, expert-led penetration testing and security assessments. We simulate real-world attacks to uncover hidden vulnerabilities, misconfigurations, and human factors that automated tools miss.
+
+What We Provide:
+• Comprehensive penetration testing — network, application, cloud, and physical
+• Real-world attack simulations (red team exercises) against your security teams
+• Hardware security assessments — chip-level and firmware analysis
+• Managed detection services (MDS) — continuous threat hunting and incident response
+• Security assessments aligned to frameworks: NIST, ISO 27001, PCI-DSS, HIPAA, GDPR
+• Post-test guidance and remediation roadmaps with executive reporting
+
+Why NCC Group:
+• Global expertise — 2,500+ security consultants across 25+ countries
+• Independent validation — no conflicts of interest, no tools to sell
+• Regulatory compliance support — direct experience with auditors and regulators
+• Proven results — average vulnerability discovery rate 40% higher than automated tools
+• Trusted by Fortune 500 companies and critical infrastructure operators
+
+Real Results:
+• One financial institution prevented a $45M fraud scheme before it happened
+• Major healthcare system discovered 12 critical misconfigurations in their AWS environment
+• Telecommunications provider reduced mean-time-to-detection by 80% with our MDS program
+• Government agency passed SOC 2 Type II audit on first attempt with our guidance
+
+Let us show you what's really at risk. Comprehensive assessments start within weeks, not months.`,
+    },
+  },
 ];
 
 export default function NewSimulation() {
@@ -251,14 +289,14 @@ export default function NewSimulation() {
           <h2 className="text-lg font-semibold">Your Pitch</h2>
 
           {/* Quick-Load Presets */}
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Quick Load — Test Pitches</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+            <p className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">Quick Load — Test Pitches</p>
+            <div className="grid grid-cols-3 gap-2">
               {PRESETS.map(preset => (
                 <button
                   key={preset.label}
                   onClick={() => loadPreset(preset)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${preset.color}`}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition ${preset.color}`}
                 >
                   {preset.label}
                 </button>
