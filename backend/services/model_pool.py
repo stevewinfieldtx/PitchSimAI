@@ -90,11 +90,17 @@ class ModelPool:
 
         for model_id, tier in model_vars:
             if model_id:
-                self.models[model_id] = PooledModel(
-                    model_id=model_id,
-                    tier=tier,
-                    semaphore=asyncio.Semaphore(concurrency),
-                )
+                if model_id in self.models:
+                    # Same model in multiple slots — if it appears as premium anywhere,
+                    # treat it as premium (premium can serve volume, but not vice versa)
+                    if tier == "premium":
+                        self.models[model_id].tier = "premium"
+                else:
+                    self.models[model_id] = PooledModel(
+                        model_id=model_id,
+                        tier=tier,
+                        semaphore=asyncio.Semaphore(concurrency),
+                    )
 
         # If no models configured, fall back to the single default model
         if not self.models and settings.openrouter_default_model:

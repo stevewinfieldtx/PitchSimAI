@@ -12,17 +12,17 @@ class Settings(BaseSettings):
     # LLM via OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_default_model: str = "openai/gpt-4o-mini"
+    openrouter_default_model: str = "google/gemini-2.5-flash"
 
-    # Multi-model pool — add as many as you want
+    # Multi-model pool — all models via OpenRouter
     # Models are distributed across simulations round-robin
     # Premium models (tier1) get high-value personas (C-suite, budget holders)
     # Volume models (tier2) handle the bulk
-    openrouter_model1_id: str = ""  # tier1 premium (e.g. anthropic/claude-sonnet-4)
-    openrouter_model2_id: str = ""  # tier1 premium (e.g. openai/gpt-4o)
-    openrouter_model3_id: str = ""  # tier2 volume  (e.g. openai/gpt-4o-mini)
-    openrouter_model4_id: str = ""  # tier2 volume  (e.g. meta-llama/llama-3.1-70b-instruct)
-    openrouter_model5_id: str = ""  # tier2 volume  (e.g. google/gemini-flash-1.5)
+    openrouter_model1_id: str = "google/gemini-2.5-flash"    # tier1 premium
+    openrouter_model2_id: str = "google/gemini-2.5-flash"    # tier1 premium
+    openrouter_model3_id: str = "google/gemini-2.5-flash"    # tier2 volume
+    openrouter_model4_id: str = "google/gemini-2.5-flash"    # tier2 volume
+    openrouter_model5_id: str = "google/gemini-2.5-flash"    # tier2 volume
 
     # Concurrency per model (stay under rate limits)
     openrouter_concurrency_per_model: int = 10
