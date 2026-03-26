@@ -1,152 +1,76 @@
 """
-Multi-model pool for distributing LLM calls across OpenRouter models.
+OpenRouter LLM client for PitchSim.
 
-Supports:
-- Round-robin distribution across all configured models
-- Tiered routing: premium models for high-value personas, volume models for bulk
-- Per-model concurrency limits to respect rate limits
-- Automatic failover if a model errors out
-- Real-time stats tracking per model
+Single model, configured via OPENROUTER_DEFAULT_MODEL env var.
+All calls go through OpenRouter. Includes timeout, retry, concurrency
+throttling, and basic stats tracking.
 """
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+import logging
 from typing import Optional, Dict, List, Any
 from openai import AsyncOpenAI
 
 from config import get_settings
 
 settings = get_settings()
-
-
-@dataclass
-class ModelStats:
-    """Track per-model performance."""
-    calls: int = 0
-    errors: int = 0
-    total_latency_ms: float = 0
-    last_error: Optional[str] = None
-
-    @property
-    def avg_latency_ms(self) -> float:
-        return self.total_latency_ms / self.calls if self.calls else 0
-
-    @property
-    def error_rate(self) -> float:
-        return self.errors / self.calls if self.calls else 0
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "calls": self.calls,
-            "errors": self.errors,
-            "avg_latency_ms": round(self.avg_latency_ms, 1),
-            "error_rate": round(self.error_rate, 3),
-            "last_error": self.last_error,
-        }
-
-
-@dataclass
-class PooledModel:
-    """A model in the pool with its own semaphore and stats."""
-    model_id: str
-    tier: str  # "premium" or "volume"
-    semaphore: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(10))
-    stats: ModelStats = field(default_factory=ModelStats)
+logger = logging.getLogger(__name__)
 
 
 class ModelPool:
     """
-    Manages a pool of LLM models for distributed simulation.
+    Single-model LLM client with retry and concurrency control.
+
+    Keeps the same interface so swarm_engine, role_synthesis, etc.
+    don't need to change.
 
     Usage:
-        pool = ModelPool()
-        model_id = pool.pick(tier="premium")
-        async with pool.acquire(model_id):
-            response = await pool.call(model_id, messages=[...])
+        pool = get_model_pool()
+        content, model_id = await pool.call_with_failover(
+            tier=None,  # ignored — single model
+            messages=[...],
+        )
     """
 
     def __init__(self):
+        self.model_id: str = settings.openrouter_default_model
         self.client = (
-            AsyncOpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url)
-            if settings.openrouter_api_key else None
-        )
-        self.models: Dict[str, PooledModel] = {}
-        self._robin_premium = 0
-        self._robin_volume = 0
-        self._robin_all = 0
-        self._lock = asyncio.Lock()
-
-        # Load models from env vars
-        model_vars = [
-            (settings.openrouter_model1_id, "premium"),
-            (settings.openrouter_model2_id, "premium"),
-            (settings.openrouter_model3_id, "volume"),
-            (settings.openrouter_model4_id, "volume"),
-            (settings.openrouter_model5_id, "volume"),
-        ]
-
-        concurrency = settings.openrouter_concurrency_per_model
-
-        for model_id, tier in model_vars:
-            if model_id:
-                if model_id in self.models:
-                    # Same model in multiple slots — if it appears as premium anywhere,
-                    # treat it as premium (premium can serve volume, but not vice versa)
-                    if tier == "premium":
-                        self.models[model_id].tier = "premium"
-                else:
-                    self.models[model_id] = PooledModel(
-                        model_id=model_id,
-                        tier=tier,
-                        semaphore=asyncio.Semaphore(concurrency),
-                    )
-
-        # If no models configured, fall back to the single default model
-        if not self.models and settings.openrouter_default_model:
-            self.models[settings.openrouter_default_model] = PooledModel(
-                model_id=settings.openrouter_default_model,
-                tier="volume",
-                semaphore=asyncio.Semaphore(concurrency),
+            AsyncOpenAI(
+                api_key=settings.openrouter_api_key,
+                base_url=settings.openrouter_base_url,
             )
+            if settings.openrouter_api_key
+            else None
+        )
+        self._semaphore = asyncio.Semaphore(settings.openrouter_concurrency_per_model)
+
+        # Stats
+        self.calls: int = 0
+        self.errors: int = 0
+        self.total_latency_ms: float = 0
+        self.last_error: Optional[str] = None
+
+    # ── Compatibility properties (used by health endpoints & swarm_engine) ──
 
     @property
     def is_available(self) -> bool:
-        return self.client is not None and len(self.models) > 0
+        return self.client is not None and bool(self.model_id)
 
     @property
-    def premium_models(self) -> List[PooledModel]:
-        return [m for m in self.models.values() if m.tier == "premium"]
+    def models(self) -> Dict[str, Any]:
+        """Compat: health endpoint reads pool.models.keys()"""
+        return {self.model_id: {"tier": "default"}} if self.model_id else {}
 
     @property
-    def volume_models(self) -> List[PooledModel]:
-        return [m for m in self.models.values() if m.tier == "volume"]
+    def premium_models(self) -> list:
+        return [type("M", (), {"model_id": self.model_id})()] if self.model_id else []
 
     @property
-    def all_models(self) -> List[PooledModel]:
-        return list(self.models.values())
+    def volume_models(self) -> list:
+        return self.premium_models
 
-    async def pick(self, tier: Optional[str] = None) -> str:
-        """
-        Pick the next model via round-robin.
-
-        tier="premium" → only premium models (falls back to volume if none)
-        tier="volume"  → only volume models (falls back to premium if none)
-        tier=None      → round-robin across all models
-        """
-        async with self._lock:
-            if tier == "premium":
-                pool = self.premium_models or self.volume_models or self.all_models
-                self._robin_premium = (self._robin_premium + 1) % len(pool)
-                return pool[self._robin_premium - 1].model_id
-            elif tier == "volume":
-                pool = self.volume_models or self.premium_models or self.all_models
-                self._robin_volume = (self._robin_volume + 1) % len(pool)
-                return pool[self._robin_volume - 1].model_id
-            else:
-                pool = self.all_models
-                self._robin_all = (self._robin_all + 1) % len(pool)
-                return pool[self._robin_all - 1].model_id
+    # ── Core call ──
 
     async def call(
         self,
@@ -157,19 +81,11 @@ class ModelPool:
         response_format: Optional[Dict] = None,
         timeout: float = 90.0,
     ) -> str:
-        """
-        Make an LLM call with semaphore-controlled concurrency, timeout, and stats tracking.
-        Returns the response content string.
-        Raises on failure (caller should handle failover).
-        """
+        """Make a single LLM call with concurrency control and timeout."""
         if not self.client:
             raise RuntimeError("No OpenRouter API key configured")
 
-        model = self.models.get(model_id)
-        if not model:
-            raise ValueError(f"Model {model_id} not in pool")
-
-        async with model.semaphore:
+        async with self._semaphore:
             start = time.monotonic()
             try:
                 kwargs = {
@@ -190,25 +106,24 @@ class ModelPool:
                 content = response.choices[0].message.content
 
                 elapsed = (time.monotonic() - start) * 1000
-                model.stats.calls += 1
-                model.stats.total_latency_ms += elapsed
-
+                self.calls += 1
+                self.total_latency_ms += elapsed
                 return content
 
             except asyncio.TimeoutError:
                 elapsed = (time.monotonic() - start) * 1000
-                model.stats.calls += 1
-                model.stats.errors += 1
-                model.stats.total_latency_ms += elapsed
-                model.stats.last_error = f"Timeout after {timeout}s"
-                raise TimeoutError(f"LLM call to {model_id} timed out after {timeout}s")
+                self.calls += 1
+                self.errors += 1
+                self.total_latency_ms += elapsed
+                self.last_error = f"Timeout after {timeout}s"
+                raise TimeoutError(f"LLM call timed out after {timeout}s")
 
             except Exception as e:
                 elapsed = (time.monotonic() - start) * 1000
-                model.stats.calls += 1
-                model.stats.errors += 1
-                model.stats.total_latency_ms += elapsed
-                model.stats.last_error = str(e)
+                self.calls += 1
+                self.errors += 1
+                self.total_latency_ms += elapsed
+                self.last_error = str(e)
                 raise
 
     async def call_with_failover(
@@ -219,74 +134,66 @@ class ModelPool:
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict] = None,
         timeout: float = 90.0,
-        retries: int = 2,
+        retries: int = 3,
     ) -> tuple[str, str]:
         """
-        Pick a model, call it, failover to another model if it fails.
-        Retries each model up to `retries` times before moving on.
-        Returns (response_content, model_id_used).
+        Call the model with retries.
+
+        tier is accepted but ignored (single model).
+        Returns (response_content, model_id) for compatibility.
         """
-        tried = set()
         last_error = None
 
-        for _ in range(min(3, len(self.models))):
-            model_id = await self.pick(tier)
-            if model_id in tried:
-                continue
-            tried.add(model_id)
+        for attempt in range(retries):
+            try:
+                content = await self.call(
+                    model_id=self.model_id,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    timeout=timeout,
+                )
+                return content, self.model_id
+            except (TimeoutError, asyncio.TimeoutError) as e:
+                last_error = e
+                logger.warning(f"Timeout attempt {attempt + 1}/{retries}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Error attempt {attempt + 1}/{retries}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
 
-            for attempt in range(retries):
-                try:
-                    content = await self.call(
-                        model_id=model_id,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        response_format=response_format,
-                        timeout=timeout,
-                    )
-                    return content, model_id
-                except (TimeoutError, asyncio.TimeoutError) as e:
-                    last_error = e
-                    print(f"Model {model_id} timeout (attempt {attempt + 1}/{retries}): {e}")
-                    if attempt < retries - 1:
-                        await asyncio.sleep(1)  # Brief pause before retry
-                    continue
-                except Exception as e:
-                    last_error = e
-                    print(f"Model {model_id} failed (attempt {attempt + 1}/{retries}): {e}")
-                    break  # Don't retry non-timeout errors, try next model
+        raise last_error or RuntimeError("LLM call failed after all retries")
 
-        raise last_error or RuntimeError("All models failed")
+    # ── Compatibility: pick() used by nothing critical but keep it ──
+
+    async def pick(self, tier: Optional[str] = None) -> str:
+        return self.model_id
+
+    # ── Stats ──
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get per-model and aggregate stats."""
-        model_stats = {}
-        total_calls = 0
-        total_errors = 0
-
-        for model_id, model in self.models.items():
-            model_stats[model_id] = {
-                "tier": model.tier,
-                **model.stats.to_dict(),
-            }
-            total_calls += model.stats.calls
-            total_errors += model.stats.errors
-
+        avg_latency = self.total_latency_ms / self.calls if self.calls else 0
+        error_rate = self.errors / self.calls if self.calls else 0
         return {
-            "models": model_stats,
-            "total_calls": total_calls,
-            "total_errors": total_errors,
-            "overall_error_rate": round(total_errors / total_calls, 3) if total_calls else 0,
+            "model": self.model_id,
+            "total_calls": self.calls,
+            "total_errors": self.errors,
+            "avg_latency_ms": round(avg_latency, 1),
+            "error_rate": round(error_rate, 3),
+            "last_error": self.last_error,
         }
 
 
-# Singleton pool instance
+# ── Singleton ──
+
 _pool: Optional[ModelPool] = None
 
 
 def get_model_pool() -> ModelPool:
-    """Get or create the global model pool singleton."""
     global _pool
     if _pool is None:
         _pool = ModelPool()

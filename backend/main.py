@@ -94,12 +94,11 @@ async def model_stats():
 
 @app.get("/api/models/pool")
 async def model_pool_info():
-    """Show the configured model pool with tiers."""
+    """Show the configured model."""
     from services.model_pool import get_model_pool
     pool = get_model_pool()
     return {
-        "premium_models": [m.model_id for m in pool.premium_models],
-        "volume_models": [m.model_id for m in pool.volume_models],
-        "concurrency_per_model": settings.openrouter_concurrency_per_model,
-        "total_models": len(pool.models),
+        "model": pool.model_id,
+        "concurrency": settings.openrouter_concurrency_per_model,
+        "available": pool.is_available,
     }
