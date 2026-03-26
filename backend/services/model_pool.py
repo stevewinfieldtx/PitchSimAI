@@ -149,9 +149,10 @@ class ModelPool:
         temperature: float = 0.8,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict] = None,
+        timeout: float = 90.0,
     ) -> str:
         """
-        Make an LLM call with semaphore-controlled concurrency and stats tracking.
+        Make an LLM call with semaphore-controlled concurrency, timeout, and stats tracking.
         Returns the response content string.
         Raises on failure (caller should handle failover).
         """
@@ -169,13 +170,17 @@ class ModelPool:
                     "model": model_id,
                     "messages": messages,
                     "temperature": temperature,
+                    "timeout": timeout,
                 }
                 if max_tokens:
                     kwargs["max_tokens"] = max_tokens
                 if response_format:
                     kwargs["response_format"] = response_format
 
-                response = await self.client.chat.completions.create(**kwargs)
+                response = await asyncio.wait_for(
+                    self.client.chat.completions.create(**kwargs),
+                    timeout=timeout,
+                )
                 content = response.choices[0].message.content
 
                 elapsed = (time.monotonic() - start) * 1000
@@ -183,6 +188,14 @@ class ModelPool:
                 model.stats.total_latency_ms += elapsed
 
                 return content
+
+            except asyncio.TimeoutError:
+                elapsed = (time.monotonic() - start) * 1000
+                model.stats.calls += 1
+                model.stats.errors += 1
+                model.stats.total_latency_ms += elapsed
+                model.stats.last_error = f"Timeout after {timeout}s"
+                raise TimeoutError(f"LLM call to {model_id} timed out after {timeout}s")
 
             except Exception as e:
                 elapsed = (time.monotonic() - start) * 1000
@@ -199,12 +212,14 @@ class ModelPool:
         temperature: float = 0.8,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict] = None,
+        timeout: float = 90.0,
+        retries: int = 2,
     ) -> tuple[str, str]:
         """
         Pick a model, call it, failover to another model if it fails.
+        Retries each model up to `retries` times before moving on.
         Returns (response_content, model_id_used).
         """
-        # Try up to N different models
         tried = set()
         last_error = None
 
@@ -214,19 +229,27 @@ class ModelPool:
                 continue
             tried.add(model_id)
 
-            try:
-                content = await self.call(
-                    model_id=model_id,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format,
-                )
-                return content, model_id
-            except Exception as e:
-                last_error = e
-                print(f"Model {model_id} failed, trying next: {e}")
-                continue
+            for attempt in range(retries):
+                try:
+                    content = await self.call(
+                        model_id=model_id,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format=response_format,
+                        timeout=timeout,
+                    )
+                    return content, model_id
+                except (TimeoutError, asyncio.TimeoutError) as e:
+                    last_error = e
+                    print(f"Model {model_id} timeout (attempt {attempt + 1}/{retries}): {e}")
+                    if attempt < retries - 1:
+                        await asyncio.sleep(1)  # Brief pause before retry
+                    continue
+                except Exception as e:
+                    last_error = e
+                    print(f"Model {model_id} failed (attempt {attempt + 1}/{retries}): {e}")
+                    break  # Don't retry non-timeout errors, try next model
 
         raise last_error or RuntimeError("All models failed")
 
