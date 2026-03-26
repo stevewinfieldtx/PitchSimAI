@@ -22,15 +22,8 @@ class ModelPool:
     """
     Single-model LLM client with retry and concurrency control.
 
-    Keeps the same interface so swarm_engine, role_synthesis, etc.
+    Keeps the same interface so swarm_engine, simulation, etc.
     don't need to change.
-
-    Usage:
-        pool = get_model_pool()
-        content, model_id = await pool.call_with_failover(
-            tier=None,  # ignored — single model
-            messages=[...],
-        )
     """
 
     def __init__(self):
@@ -51,7 +44,7 @@ class ModelPool:
         self.total_latency_ms: float = 0
         self.last_error: Optional[str] = None
 
-    # ── Compatibility properties (used by health endpoints & swarm_engine) ──
+    # ── Compatibility properties (used by health endpoints) ──
 
     @property
     def is_available(self) -> bool:
@@ -59,7 +52,6 @@ class ModelPool:
 
     @property
     def models(self) -> Dict[str, Any]:
-        """Compat: health endpoint reads pool.models.keys()"""
         return {self.model_id: {"tier": "default"}} if self.model_id else {}
 
     @property
@@ -81,7 +73,6 @@ class ModelPool:
         response_format: Optional[Dict] = None,
         timeout: float = 90.0,
     ) -> str:
-        """Make a single LLM call with concurrency control and timeout."""
         if not self.client:
             raise RuntimeError("No OpenRouter API key configured")
 
@@ -137,9 +128,7 @@ class ModelPool:
         retries: int = 3,
     ) -> tuple[str, str]:
         """
-        Call the model with retries.
-
-        tier is accepted but ignored (single model).
+        Call the model with retries. tier is ignored (single model).
         Returns (response_content, model_id) for compatibility.
         """
         last_error = None
@@ -168,12 +157,8 @@ class ModelPool:
 
         raise last_error or RuntimeError("LLM call failed after all retries")
 
-    # ── Compatibility: pick() used by nothing critical but keep it ──
-
     async def pick(self, tier: Optional[str] = None) -> str:
         return self.model_id
-
-    # ── Stats ──
 
     def get_stats(self) -> Dict[str, Any]:
         avg_latency = self.total_latency_ms / self.calls if self.calls else 0
@@ -187,8 +172,6 @@ class ModelPool:
             "last_error": self.last_error,
         }
 
-
-# ── Singleton ──
 
 _pool: Optional[ModelPool] = None
 

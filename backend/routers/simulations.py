@@ -11,7 +11,6 @@ from database import get_db, async_session
 from models import Simulation, SimulationResult, PersonaResponse as PersonaResponseModel
 from schemas import SimulationCreate, SimulationResponse
 from services.simulation import run_simulation, run_swarm_simulation
-from services.role_synthesis import synthesize_role, get_all_roles, extract_role_quotes
 
 router = APIRouter()
 
@@ -24,11 +23,6 @@ async def create_simulation(
 ):
     num_personas = len(sim_data.persona_ids) if sim_data.persona_ids else sim_data.num_personas
     config = sim_data.config or {}
-
-    # Extract cultural context from config
-    seller_region = config.get("seller_region", "")
-    buyer_region = config.get("buyer_region", "")
-    cultural_notes = config.get("cultural_notes", "")
 
     sim = Simulation(
         pitch_title=sim_data.pitch_title,
@@ -82,10 +76,6 @@ async def create_simulation(
         company_name=sim_data.company_name or "",
         company_size=config.get("company_size", "mid-market"),
         target_audience=sim_data.target_audience or "",
-        sub_industry=sim_data.sub_industry,
-        seller_region=seller_region,
-        buyer_region=buyer_region,
-        cultural_notes=cultural_notes,
         num_tables=num_tables,
         personas_per_table=personas_per_table,
         debate_rounds=debate_rounds,
@@ -229,74 +219,3 @@ async def get_simulation_responses(
             for r in responses
         ],
     }
-
-
-@router.get("/{simulation_id}/roles")
-async def get_simulation_roles(
-    simulation_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Get all unique roles/titles from the debate transcript."""
-    sim_result = await db.execute(
-        select(Simulation).where(Simulation.id == simulation_id)
-    )
-    sim = sim_result.scalar_one_or_none()
-    if not sim:
-        raise HTTPException(status_code=404, detail="Simulation not found")
-
-    config = sim.config or {}
-    if config.get("engine") != "pitchsim_swarm":
-        raise HTTPException(status_code=400, detail="Role analysis only available for swarm simulations")
-
-    transcript = config.get("debate_transcript", [])
-    roles = get_all_roles(transcript)
-    return {"roles": roles}
-
-
-@router.post("/{simulation_id}/synthesize-role")
-async def synthesize_simulation_role(
-    simulation_id: UUID,
-    body: dict,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Synthesize all feedback from a specific role into actionable intelligence.
-    Body: {"role": "CTO"}
-    Results are cached — subsequent requests for the same role return instantly.
-    """
-    target_role = body.get("role", "")
-    if not target_role:
-        raise HTTPException(status_code=400, detail="'role' field required")
-
-    sim_result = await db.execute(
-        select(Simulation).where(Simulation.id == simulation_id)
-    )
-    sim = sim_result.scalar_one_or_none()
-    if not sim:
-        raise HTTPException(status_code=404, detail="Simulation not found")
-
-    config = sim.config or {}
-    if config.get("engine") != "pitchsim_swarm":
-        raise HTTPException(status_code=400, detail="Role synthesis only available for swarm simulations")
-
-    # Check cache first
-    cache_key = f"role_synthesis_{target_role.lower().replace(' ', '_')}"
-    cached = config.get(cache_key)
-    if cached:
-        return cached
-
-    # Run synthesis
-    transcript = config.get("debate_transcript", [])
-    result = await synthesize_role(
-        debate_transcript=transcript,
-        target_title=target_role,
-        pitch_title=sim.pitch_title or "",
-        company_name=sim.company_name or "",
-        industry=sim.industry or "",
-    )
-
-    # Cache the result in simulation config
-    sim.config = {**(sim.config or {}), cache_key: result}
-    await db.commit()
-
-    return result
