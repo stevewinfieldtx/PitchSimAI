@@ -296,11 +296,21 @@ export default function NewSimulation() {
     setLoading(true);
     try {
       const payload = {
-        ...form,
+        pitch_title: form.pitch_title,
+        pitch_content: form.pitch_content,
+        company_name: form.company_name,
+        industry: form.industry,
+        sub_industry: form.sub_industry || undefined,
+        target_audience: form.target_audience,
+        num_personas: form.num_tables * form.personas_per_table,
+        persona_filters: form.persona_filters,
         config: {
           num_tables: form.num_tables,
           personas_per_table: form.personas_per_table,
           debate_rounds: form.debate_rounds,
+          seller_region: form.seller_region || undefined,
+          buyer_region: form.buyer_region || undefined,
+          cultural_notes: form.cultural_notes || undefined,
         },
       };
       const result = await api.createSimulation(payload);
