@@ -189,7 +189,7 @@ Return ONLY valid JSON, no markdown.
 """
 
     try:
-        response = await pool.call_with_failover(
+        response, _ = await pool.call_with_failover(
             tier="premium",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,

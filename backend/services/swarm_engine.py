@@ -44,6 +44,31 @@ from services.model_pool import ModelPool, get_model_pool
 
 logger = logging.getLogger(__name__)
 
+# Max concurrent LLM calls — prevents event loop starvation on Railway
+MAX_CONCURRENT_LLM = 5
+_llm_semaphore = None
+
+def _get_llm_semaphore():
+    """Lazy-init semaphore so it's created inside the event loop."""
+    global _llm_semaphore
+    if _llm_semaphore is None:
+        _llm_semaphore = asyncio.Semaphore(MAX_CONCURRENT_LLM)
+    return _llm_semaphore
+
+
+async def _throttled_gather(*coros, return_exceptions=True):
+    """Run coroutines with a concurrency limit to avoid event loop starvation."""
+    sem = _get_llm_semaphore()
+
+    async def _wrapped(coro):
+        async with sem:
+            return await coro
+
+    return await asyncio.gather(
+        *[_wrapped(c) for c in coros],
+        return_exceptions=return_exceptions,
+    )
+
 
 # ──────────────────────────────────────────────
 # Data Structures
@@ -514,7 +539,7 @@ class SwarmEngine:
             for persona in table.personas:
                 tasks.append(self._get_initial_reaction(persona, pitch, company_name, target_audience))
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await _throttled_gather(*tasks, return_exceptions=True)
 
         # Store results back into tables
         idx = 0
@@ -593,7 +618,7 @@ Respond in first person, as yourself. Be direct and honest."""
                     self._get_debate_response(persona, pitch, others_said, round_num)
                 )
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await _throttled_gather(*tasks, return_exceptions=True)
 
         idx = 0
         for table in tables:
@@ -671,7 +696,7 @@ Respond in 3-5 sentences. Be decisive — you're trying to reach a conclusion.""
     async def _generate_table_summaries(self, tables: List[CommitteeTable], pitch: str):
         """Each table produces a verdict summary."""
         tasks = [self._summarize_table(table, pitch) for table in tables]
-        summaries = await asyncio.gather(*tasks, return_exceptions=True)
+        summaries = await _throttled_gather(*tasks, return_exceptions=True)
 
         for table, summary in zip(tables, summaries):
             if isinstance(summary, Exception):
