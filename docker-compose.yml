@@ -33,7 +33,7 @@ services:
 
   # ── MiroFish: Swarm Intelligence Simulation Engine ──
   # Spawns thousands of autonomous AI agents that simulate buyer behavior.
-  # PitchSimAI sends pitches to MiroFish via REST API (port 5001).
+  # PitchProofAI sends pitches to MiroFish via REST API (port 5001).
   # See: https://github.com/666ghj/MiroFish
   mirofish:
     build:

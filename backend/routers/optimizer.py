@@ -87,8 +87,8 @@ async def start_optimization(
                 max_iterations=req.max_iterations,
                 target_score=req.target_score,
                 num_tables=3,
-                personas_per_table=4,
-                debate_rounds=1,
+                personas_per_table=5,
+                debate_rounds=2,
                 progress_callback=progress_cb,
             )
 
@@ -149,8 +149,8 @@ async def optimize_from_simulation(
                 max_iterations=req.max_iterations,
                 target_score=req.target_score,
                 num_tables=3,
-                personas_per_table=4,
-                debate_rounds=1,
+                personas_per_table=5,
+                debate_rounds=2,
                 progress_callback=progress_cb,
             )
 

@@ -1,5 +1,5 @@
 """
-OpenRouter LLM client for PitchSim.
+OpenRouter LLM client for PitchProof AI.
 
 Single model, configured via OPENROUTER_DEFAULT_MODEL env var.
 All calls go through OpenRouter. Includes timeout, retry, concurrency

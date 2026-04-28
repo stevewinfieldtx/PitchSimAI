@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 class Settings(BaseSettings):
-    app_name: str = "PitchSim AI"
+    app_name: str = "PitchProof AI"
     debug: bool = False
 
     # Database

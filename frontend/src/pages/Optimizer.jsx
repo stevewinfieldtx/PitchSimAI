@@ -141,11 +141,11 @@ export default function Optimizer() {
               <p className="text-xl font-bold">{result.total_iterations}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Kept</p>
+              <p className="text-xs text-gray-500">Accepted</p>
               <p className="text-xl font-bold text-emerald-600">{result.kept_count}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Reverted</p>
+              <p className="text-xs text-gray-500">Rejected</p>
               <p className="text-xl font-bold text-red-500">{result.reverted_count}</p>
             </div>
             <div>
@@ -191,18 +191,18 @@ export default function Optimizer() {
         {/* Score Progression */}
         {progression.length > 1 && (
           <div className="bg-white p-5 rounded-xl border border-gray-200 mb-6">
-            <h3 className="font-semibold text-sm mb-3">Score Progression</h3>
+            <h3 className="font-semibold text-sm mb-3">Composite Score Progression</h3>
             <div className="flex items-end gap-1 h-24">
               {progression.map((p, idx) => {
-                const engagement = p.engagement || 0;
+                const score = p.composite || p.engagement || 0;
                 return (
                   <div key={idx} className="flex-1 flex flex-col items-center gap-1">
                     <div
                       className={`w-full rounded-t transition-all ${
                         p.kept !== false ? 'bg-primary-400' : 'bg-red-300'
                       }`}
-                      style={{ height: `${Math.max(4, engagement)}%` }}
-                      title={`Iter ${p.iteration}: ${engagement}`}
+                      style={{ height: `${Math.max(4, score)}%` }}
+                      title={`Iter ${p.iteration}: composite ${score}`}
                     />
                     <span className="text-[10px] text-gray-400">{p.iteration}</span>
                   </div>
@@ -277,23 +277,29 @@ export default function Optimizer() {
                       iter.iteration === 0 ? 'bg-gray-100 text-gray-600' :
                       iter.kept ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
                     }`}>
-                      {iter.iteration === 0 ? 'BASELINE' : iter.kept ? 'KEPT' : 'REVERTED'}
+                      {iter.iteration === 0 ? 'BASELINE' : iter.kept ? 'ACCEPTED' : 'REJECTED'}
                     </span>
                     <span className="text-sm font-medium">
                       Iteration {iter.iteration}
                     </span>
                     <span className="text-xs text-gray-500">
-                      engagement: {iter.scores?.overall_engagement || '-'}
+                      composite: {iter.composite_score || '-'} · engagement: {iter.scores?.overall_engagement || '-'}
                     </span>
                   </div>
                   {expandedIter === idx ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
                 </button>
                 {expandedIter === idx && (
                   <div className="px-4 pb-4 border-t border-gray-100">
-                    <p className="text-sm text-gray-600 mt-3 mb-2">{iter.changes_made}</p>
+                    {iter.hypothesis && iter.iteration > 0 && (
+                      <div className="mt-3 mb-3 bg-indigo-50 p-3 rounded-lg">
+                        <p className="text-xs font-semibold text-indigo-700 mb-1">Hypothesis</p>
+                        <p className="text-sm text-indigo-900">{iter.hypothesis}</p>
+                      </div>
+                    )}
+                    <p className="text-sm text-gray-600 mb-2">{iter.changes_made}</p>
                     {iter.objections?.length > 0 && (
                       <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-500 mb-1">Objections:</p>
+                        <p className="text-xs font-medium text-gray-500 mb-1">Top Objections:</p>
                         <ul className="text-xs text-gray-600 space-y-1">
                           {iter.objections.slice(0, 3).map((o, oi) => <li key={oi}>- {o}</li>)}
                         </ul>

@@ -407,7 +407,7 @@ Measure:
 
 class MiroFishOrchestrator:
     """
-    Orchestrates the full MiroFish simulation pipeline for PitchSimAI.
+    Orchestrates the full MiroFish simulation pipeline for PitchProofAI.
 
     This is the main entry point that the simulation router calls.
     It manages the entire lifecycle: graph → agents → simulation → report.
@@ -613,7 +613,7 @@ class MiroFishOrchestrator:
         self, personas: Optional[List[Dict[str, Any]]]
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        Convert PitchSimAI personas into MiroFish agent seeds.
+        Convert PitchProofAI personas into MiroFish agent seeds.
 
         MiroFish will use these as hints when generating agent profiles,
         ensuring the simulated agents match our buyer committee roles.

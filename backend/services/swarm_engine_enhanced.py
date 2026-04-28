@@ -46,6 +46,109 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
+# Famous Guides — optional strategic advisor for committees
+# ──────────────────────────────────────────────
+
+FAMOUS_GUIDES = [
+    {
+        "id": "guide_jobs",
+        "name": "Steve Jobs",
+        "title": "Legendary Product Visionary",
+        "persona": "You are Steve Jobs. You think in terms of simplicity, design, and the customer experience above all. "
+                   "You challenge the committee to think about what the CUSTOMER actually feels, not just features and specs. "
+                   "You ask: Is this pitch simple enough? Does it make the customer feel something? "
+                   "You push back on complexity, on feature-dumping, on anything that obscures the core value proposition. "
+                   "You speak with absolute conviction. You believe the best products sell themselves when positioned correctly.",
+        "focus": "product vision, simplicity, customer experience, positioning",
+        "style": "visionary, demanding, cuts through noise",
+    },
+    {
+        "id": "guide_buffett",
+        "name": "Warren Buffett",
+        "title": "Legendary Value Investor",
+        "persona": "You are Warren Buffett. You evaluate everything through the lens of long-term value and economic moats. "
+                   "You ask the committee: What is the durable competitive advantage here? Is the ROI real or imagined? "
+                   "What happens in year 3, year 5? You are skeptical of hype and buzzwords. "
+                   "You trust numbers, not narratives. You push the committee to think about what they are giving up, not just what they are getting. "
+                   "You speak plainly, use folksy wisdom, and make complex ideas simple.",
+        "focus": "value, ROI, competitive moats, long-term thinking",
+        "style": "analytical, patient, skeptical of hype, plain-spoken",
+    },
+    {
+        "id": "guide_gates",
+        "name": "Bill Gates",
+        "title": "Technology and Systems Thinker",
+        "persona": "You are Bill Gates. You think in systems and platforms. "
+                   "You ask: How does this integrate with what we already have? What is the platform play? "
+                   "You care about adoption curves, ecosystem effects, and technical debt. "
+                   "You push the committee to think about scalability, interoperability, and the total cost of the technology stack. "
+                   "You are deeply analytical but also understand that technology only matters if people actually use it.",
+        "focus": "systems thinking, platform strategy, adoption, integration",
+        "style": "analytical, systematic, practical, forward-looking",
+    },
+    {
+        "id": "guide_oprah",
+        "name": "Oprah Winfrey",
+        "title": "Master Communicator and People Leader",
+        "persona": "You are Oprah Winfrey. You focus on the HUMAN side of every decision. "
+                   "You ask: How will the people who use this actually feel? What is the story here? "
+                   "You push the committee to consider organizational change, team buy-in, and the emotional journey of adoption. "
+                   "You know that the best technology in the world fails if the people reject it. "
+                   "You speak from the heart but with business acumen.",
+        "focus": "people, change management, storytelling, organizational buy-in",
+        "style": "empathetic, persuasive, people-first, authentic",
+    },
+    {
+        "id": "guide_musk",
+        "name": "Elon Musk",
+        "title": "First Principles Innovator",
+        "persona": "You are Elon Musk. You think from first principles and challenge every assumption. "
+                   "You ask: Why are we doing it this way? What if we removed 80 percent of the complexity? "
+                   "You push the committee to think 10x bigger but also to question whether the pitch is solving the RIGHT problem. "
+                   "You are impatient with incremental thinking. You want to know what the most ambitious version looks like.",
+        "focus": "first principles, 10x thinking, challenging assumptions, bold moves",
+        "style": "contrarian, bold, impatient with mediocrity, first-principles",
+    },
+    {
+        "id": "guide_bezos",
+        "name": "Jeff Bezos",
+        "title": "Customer Obsession and Scale Master",
+        "persona": "You are Jeff Bezos. Everything starts with the customer and works backwards. "
+                   "You ask: What does the customer actually need? What is the Day 1 mindset here? "
+                   "You push the committee to write the press release before building the product. "
+                   "You care about flywheel effects, operational excellence, and relentless optimization. "
+                   "You think long-term and are willing to be misunderstood for extended periods.",
+        "focus": "customer obsession, operational excellence, flywheel thinking, long-term",
+        "style": "methodical, customer-first, long-horizon, data-driven",
+    },
+    {
+        "id": "guide_suntzu",
+        "name": "Sun Tzu",
+        "title": "Master Strategist",
+        "persona": "You are Sun Tzu, the ancient military strategist. You see business as war conducted through other means. "
+                   "You ask: What is the competitive landscape? Where is the opponents weakness? "
+                   "You push the committee to think about positioning, timing, and the art of winning without direct confrontation. "
+                   "You evaluate whether the pitch creates strategic advantage or merely reacts to competitors. "
+                   "You speak in strategic principles that cut through tactical noise.",
+        "focus": "competitive strategy, positioning, timing, strategic advantage",
+        "style": "strategic, indirect, wisdom-based, sees the whole battlefield",
+    },
+]
+
+
+def get_guide_by_id(guide_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a famous guide by ID."""
+    if not guide_id:
+        return None
+    for g in FAMOUS_GUIDES:
+        if g["id"] == guide_id:
+            return g
+    return None
+
+
+
+
+# ──────────────────────────────────────────────
 # Data Structures
 # ──────────────────────────────────────────────
 
@@ -79,6 +182,9 @@ class AgentPersona:
         self.messages: List[Dict[str, str]] = []  # conversation history
 
     def system_prompt(self) -> str:
+        # Use custom guide prompt if this is a famous guide
+        if hasattr(self, '_guide_system_prompt') and self._guide_system_prompt:
+            return self._guide_system_prompt + f"\n\nYou are advising a buying committee at a {self.company_size} {self.industry} company. Stay in character."
         traits = ", ".join(f"{k}: {v}" for k, v in self.personality.items())
         pains = ", ".join(self.pain_points) if self.pain_points else "general efficiency"
         return f"""You are {self.name}, {self.title} at a {self.company_size} {self.industry} company.
@@ -238,6 +344,7 @@ def generate_committee_tables(
     personas_per_table: int = 5,
     existing_personas: Optional[List[Dict[str, Any]]] = None,
     seed: Optional[int] = None,
+    guide_id: Optional[str] = None,
 ) -> List[CommitteeTable]:
     """
     Generate multiple buying committee tables for deliberation.
@@ -319,6 +426,27 @@ def generate_committee_tables(
             variant=variant_config["variant"],
         )
         tables.append(table)
+
+    # Add famous guide to each table if specified
+    guide = get_guide_by_id(guide_id) if guide_id else None
+    if guide:
+        for table in tables:
+            guide_persona = AgentPersona(
+                name=guide["name"],
+                title=guide["title"],
+                role_in_committee="advisor",  # special role — advises but has unique weight
+                industry=industry,
+                company_size=company_size_label,
+                personality={"skepticism": 0.5, "innovation_openness": 0.7, "risk_tolerance": 0.6, "detail_orientation": 0.8},
+                pain_points=["strategic clarity", "competitive positioning"],
+                buying_style="visionary",
+                budget_authority="influence",
+                bio=guide.get("persona", f"Legendary advisor. Focus: {guide.get('focus', 'strategy')}"),
+            )
+            # The guide persona uses custom system prompt from the guide data
+            guide_persona._guide_system_prompt = guide.get("persona", "")
+            table.personas.append(guide_persona)
+        logger.info(f"Added famous guide '{guide['name']}' to all {len(tables)} tables")
 
     return tables
 
@@ -454,10 +582,11 @@ class SwarmEngine:
         target_audience: str = "",
         num_tables: int = 3,
         personas_per_table: int = 5,
-        debate_rounds: int = 2,
+        debate_rounds: int = 5,
         existing_personas: Optional[List[Dict[str, Any]]] = None,
         progress_callback: Optional[Callable] = None,
         seed: Optional[int] = None,
+        guide_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Run a full swarm deliberation on a sales pitch.
@@ -467,10 +596,15 @@ class SwarmEngine:
         """
         started_at = datetime.utcnow()
 
-        async def _progress(stage: str, detail: str = "", pct: int = 0):
+        self._progress_fn = None
+        async def _progress(stage: str, detail: str = "", pct: int = 0, extra: dict = None):
             logger.info(f"[SwarmEngine] {stage}: {detail}")
             if progress_callback:
-                await progress_callback(stage, detail, pct)
+                if extra:
+                    await progress_callback(stage, detail, pct, extra)
+                else:
+                    await progress_callback(stage, detail, pct)
+        self._progress_fn = _progress
 
         # ── Stage 1: Generate Committees ──
         await _progress("initializing", "Assembling buying committees...", 5)
@@ -483,6 +617,7 @@ class SwarmEngine:
             personas_per_table=personas_per_table,
             existing_personas=existing_personas,
             seed=seed,
+            guide_id=guide_id,
         )
 
         logger.info(f"Created {len(tables)} committee tables with {sum(len(t.personas) for t in tables)} total agents")
@@ -529,6 +664,8 @@ class SwarmEngine:
                 "elapsed_seconds": round(elapsed, 1),
                 "industry": industry,
                 "company_name": company_name,
+                "guide": guide_id,
+                "guide_name": (get_guide_by_id(guide_id) or {}).get("name"),
             },
             "scores": consensus.get("scores", {}),
         }
@@ -571,6 +708,14 @@ class SwarmEngine:
                     "response": response_text,
                 })
             table.rounds.append(round_data)
+            # Emit per-table detail for live visibility
+            if hasattr(self, '_progress_fn') and self._progress_fn:
+                await self._progress_fn(
+                    "initial_reaction_detail",
+                    f"Table {table.table_id}: {len(round_data['responses'])} responses collected",
+                    0,
+                    {"table_id": table.table_id, "responses": round_data["responses"]}
+                )
 
     async def _get_initial_reaction(
         self, persona: AgentPersona, pitch: str, company_name: str, target_audience: str
@@ -644,6 +789,14 @@ Respond in first person, as yourself. Be direct and honest."""
                     "response": response_text,
                 })
             table.rounds.append(round_data)
+            # Emit per-table detail for live visibility
+            if hasattr(self, '_progress_fn') and self._progress_fn:
+                await self._progress_fn(
+                    "initial_reaction_detail",
+                    f"Table {table.table_id}: {len(round_data['responses'])} responses collected",
+                    0,
+                    {"table_id": table.table_id, "responses": round_data["responses"]}
+                )
 
     def _build_committee_context(self, table: CommitteeTable, current_persona: AgentPersona) -> str:
         """Build a summary of what other committee members have said so far."""

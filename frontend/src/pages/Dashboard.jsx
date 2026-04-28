@@ -36,7 +36,7 @@ export default function Dashboard() {
             <Zap className="h-5 w-5 text-yellow-300" />
             <span className="text-xs font-semibold uppercase tracking-wider text-primary-200">AI-Powered Sales Intelligence</span>
           </div>
-          <h1 className="text-3xl font-bold mb-3">PitchSim AI</h1>
+          <h1 className="text-3xl font-bold mb-3">PitchProof AI</h1>
           <p className="text-primary-100 text-lg max-w-2xl mb-6 leading-relaxed">
             Test your sales pitch against AI-generated buying committees before you walk into the room.
             Get real objections, real champions, and real deal predictions — so you can close with confidence.

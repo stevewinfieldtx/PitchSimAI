@@ -1,7 +1,7 @@
 """
 Simulation Service
 ===================
-Orchestrates pitch simulations using the PitchSim Swarm Engine.
+Orchestrates pitch simulations using the PitchProof Swarm Engine.
 
 The Swarm Engine creates multiple buying committee "tables", runs them through
 multi-round deliberation (react → debate → cross-table → consensus), and
@@ -46,7 +46,7 @@ async def run_swarm_simulation(
     personas: Optional[List[Dict[str, Any]]] = None,
 ):
     """
-    Run a pitch simulation using the PitchSim Swarm Engine.
+    Run a pitch simulation using the PitchProof Swarm Engine.
 
     This is the PRIMARY simulation method. It creates multiple buying
     committees that debate the pitch and reach consensus.

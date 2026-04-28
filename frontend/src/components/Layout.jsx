@@ -20,7 +20,7 @@ export default function Layout() {
             <div className="flex">
               <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary-600">
                 <Zap className="h-6 w-6" />
-                PitchSim AI
+                PitchProof AI
               </Link>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
                 {navItems.map((item) => {
