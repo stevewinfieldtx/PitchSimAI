@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # LLM via OpenRouter — single model
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_default_model: str = "google/gemini-2.5-flash"
+    openrouter_model_id: str = "openai/gpt-4o-mini"
     openrouter_concurrency_per_model: int = 10
 
     # Redis
@@ -33,3 +33,4 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings():
     return Settings()
+

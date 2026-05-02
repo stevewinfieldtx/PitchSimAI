@@ -1,7 +1,7 @@
 """
 OpenRouter LLM client for PitchProof AI.
 
-Single model, configured via OPENROUTER_DEFAULT_MODEL env var.
+Single model, configured via OPENROUTER_MODEL_ID env var.
 All calls go through OpenRouter. Includes timeout, retry, concurrency
 throttling, and basic stats tracking.
 """
@@ -27,7 +27,7 @@ class ModelPool:
     """
 
     def __init__(self):
-        self.model_id: str = settings.openrouter_default_model
+        self.model_id: str = settings.openrouter_model_id
         self.client = (
             AsyncOpenAI(
                 api_key=settings.openrouter_api_key,
@@ -181,3 +181,4 @@ def get_model_pool() -> ModelPool:
     if _pool is None:
         _pool = ModelPool()
     return _pool
+

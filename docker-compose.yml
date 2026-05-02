@@ -3,6 +3,8 @@ version: "3.8"
 services:
   backend:
     build: ./backend
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     environment:
@@ -10,7 +12,7 @@ services:
       - DATABASE_URL_SYNC=postgresql://postgres:postgres@db:5432/pitchsim
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      - OPENROUTER_DEFAULT_MODEL=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - OPENROUTER_MODEL_ID=${OPENROUTER_MODEL_ID:-openai/gpt-4o-mini}
       - OPENROUTER_MODEL1_ID=${OPENROUTER_MODEL1_ID:-}
       - OPENROUTER_MODEL2_ID=${OPENROUTER_MODEL2_ID:-}
       - OPENROUTER_MODEL3_ID=${OPENROUTER_MODEL3_ID:-}
@@ -44,11 +46,11 @@ services:
     environment:
       - LLM_API_KEY=${OPENROUTER_API_KEY:-}
       - LLM_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      - LLM_MODEL_NAME=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - LLM_MODEL_NAME=${OPENROUTER_MODEL_ID:-openai/gpt-4o-mini}
       - ZEP_API_KEY=${ZEP_API_KEY:-}
       - BOOST_LLM_API_KEY=${OPENROUTER_API_KEY:-}
       - BOOST_LLM_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      - BOOST_LLM_MODEL_NAME=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - BOOST_LLM_MODEL_NAME=${OPENROUTER_MODEL_ID:-openai/gpt-4o-mini}
     volumes:
       - mirofish_data:/app/backend/uploads
     restart: unless-stopped
@@ -87,3 +89,4 @@ services:
 volumes:
   pgdata:
   mirofish_data:
+
