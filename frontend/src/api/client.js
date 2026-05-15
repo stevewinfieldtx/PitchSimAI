@@ -142,6 +142,28 @@ class ApiClient {
     return this.request('/optimizer/jobs');
   }
 
+  // Committee Rooms
+  async getAvailableRooms(simulationId) {
+    return this.request(`/rooms/simulation/${simulationId}/available`);
+  }
+
+  async createRoom(data) {
+    return this.request('/rooms', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getRoom(roomId) {
+    return this.request(`/rooms/${roomId}`);
+  }
+
+  connectRoomWebSocket(roomId) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    return new WebSocket(`${protocol}//${host}/api/rooms/${roomId}/ws`);
+  }
+
   // Health & Engine Status
   async healthCheck() {
     return this.request('/health/full');

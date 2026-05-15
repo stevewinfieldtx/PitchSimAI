@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import init_db
-from routers import simulations, personas, chat, committee, optimizer, channel
+from routers import simulations, personas, chat, committee, optimizer, channel, room
 
 
 settings = get_settings()
@@ -42,6 +42,7 @@ app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(committee.router, prefix="/api/committee", tags=["Buying Committee"])
 app.include_router(optimizer.router, prefix="/api/optimizer", tags=["AutoOptimizer"])
 app.include_router(channel.router, prefix="/api/channel", tags=["ChannelSim"])
+app.include_router(room.router, prefix="/api/rooms", tags=["Committee Rooms"])
 
 @app.get("/api/health")
 async def health_check():

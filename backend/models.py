@@ -129,3 +129,21 @@ class PersonaConversation(Base):
 
     simulation = relationship("Simulation", back_populates="conversations")
     persona = relationship("Persona")
+
+
+class CommitteeRoom(Base):
+    __tablename__ = "committee_rooms"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    simulation_id = Column(UUID(as_uuid=True), ForeignKey("simulations.id", ondelete="CASCADE"), nullable=False)
+    room_type = Column(String(50), nullable=False)  # "role" or "table"
+    role_filter = Column(String(255), nullable=True)  # e.g. "CTO", "CEO" — for role-based rooms
+    table_index = Column(Integer, nullable=True)  # which table — for table-based rooms
+    room_name = Column(String(500), nullable=False)
+    participant_ids = Column(JSON, default=[])  # list of persona IDs in this room
+    conversation_history = Column(JSON, default=[])  # full group chat transcript
+    voice_config = Column(JSON, default={})  # persona_id → elevenlabs voice_id mapping
+    last_message_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    simulation = relationship("Simulation")

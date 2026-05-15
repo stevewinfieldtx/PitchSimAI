@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     swarm_default_personas_per_table: int = 5
     swarm_default_debate_rounds: int = 2
 
+    # ElevenLabs Voice
+    elevenlabs_api_key: str = ""
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+
     # Simulation defaults
     default_num_personas: int = 10
     max_personas_per_sim: int = 100

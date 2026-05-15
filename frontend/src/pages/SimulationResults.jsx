@@ -5,8 +5,10 @@ import {
   ArrowLeft, RefreshCw, Zap, TrendingUp, TrendingDown, AlertTriangle,
   Lightbulb, Shield, Target, Brain, Users, ChevronDown, ChevronRight,
   Clock, CheckCircle2, XCircle, AlertCircle, Crosshair, BarChart3,
-  Sparkles, Eye, ThumbsUp, ThumbsDown, Scale, Copy, Check
+  Sparkles, Eye, ThumbsUp, ThumbsDown, Scale, Copy, Check,
+  MessageSquare, Mic, Volume2
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import SwarmVisualization from '../components/SwarmVisualization';
 
 // ─── Outcome color schemes ───
@@ -147,11 +149,14 @@ function CommitteeAccordion({ table, index }) {
 // ─── Main Component ───
 export default function SimulationResults() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [sim, setSim] = useState(null);
   const [responses, setResponses] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('insights');
   const [copiedPitch, setCopiedPitch] = useState(false);
+  const [availableRooms, setAvailableRooms] = useState(null);
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -175,6 +180,30 @@ export default function SimulationResults() {
     }, 3000);
     return () => clearInterval(interval);
   }, [id, sim?.status]);
+
+  // Load available rooms when simulation is completed
+  useEffect(() => {
+    if (sim?.status === 'completed') {
+      api.getAvailableRooms(id).then(setAvailableRooms).catch(console.error);
+    }
+  }, [id, sim?.status]);
+
+  const handleCreateRoom = async (roomType, roleFilter, tableIndex) => {
+    setCreatingRoom(true);
+    try {
+      const room = await api.createRoom({
+        simulation_id: id,
+        room_type: roomType,
+        role_filter: roleFilter || undefined,
+        table_index: tableIndex !== undefined ? tableIndex : undefined,
+      });
+      navigate(`/room/${room.id}`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setCreatingRoom(false);
+    }
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -227,7 +256,7 @@ export default function SimulationResults() {
   };
 
   const TABS = isSwarm
-    ? ['insights', 'debates', 'objections', 'action_plan']
+    ? ['insights', 'debates', 'objections', 'action_plan', 'rooms']
     : ['overview', 'personas', 'recommendations'];
 
   const TAB_LABELS = {
@@ -235,6 +264,7 @@ export default function SimulationResults() {
     debates: 'Committee Debates',
     objections: 'Objections & Strengths',
     action_plan: 'Action Plan',
+    rooms: '🎙️ Committee Rooms',
     overview: 'Overview',
     personas: 'Personas',
     recommendations: 'Recommendations',
@@ -672,6 +702,102 @@ export default function SimulationResults() {
                   Launch AutoOptimizer
                 </Link>
               </div>
+            </div>
+          )}
+
+          {/* ─── COMMITTEE ROOMS TAB ─── */}
+          {tab === 'rooms' && availableRooms && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <MessageSquare className="h-6 w-6 text-indigo-600" />
+                  <h2 className="text-lg font-bold text-indigo-900">Committee Rooms</h2>
+                </div>
+                <p className="text-sm text-indigo-700">
+                  Jump into a live conversation with committee members. Chat by role (all CTOs together, all CFOs together) or by table (the full committee that deliberated together). Voice-enabled with ElevenLabs.
+                </p>
+              </div>
+
+              {/* Existing Rooms */}
+              {availableRooms.existing_rooms?.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Open Rooms</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {availableRooms.existing_rooms.map((r) => (
+                      <Link
+                        key={r.id}
+                        to={`/room/${r.id}`}
+                        className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-indigo-300 transition group"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Volume2 className="h-4 w-4 text-indigo-500" />
+                          <span className="font-medium text-gray-900 group-hover:text-indigo-700">{r.room_name}</span>
+                        </div>
+                        <p className="text-xs text-gray-400">Click to rejoin</p>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Create by Role */}
+              {availableRooms.roles?.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Chat by Role</h3>
+                  <p className="text-sm text-gray-500 mb-3">Group the same role from every table into one room — compare how different CTOs, CFOs, etc. reacted.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {availableRooms.roles.map((r) => (
+                      <button
+                        key={r.role}
+                        onClick={() => handleCreateRoom('role', r.role)}
+                        disabled={creatingRoom}
+                        className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-indigo-300 transition text-left disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold text-gray-900">{r.role}</span>
+                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{r.count} people</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-indigo-600">
+                          <Mic className="h-3 w-3" />
+                          <span>Open room</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Create by Table */}
+              {availableRooms.tables?.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Chat by Table</h3>
+                  <p className="text-sm text-gray-500 mb-3">Chat with the full buying committee that deliberated together — dig deeper into their discussion.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {availableRooms.tables.map((t) => {
+                      const v = VARIANT_LABELS[t.variant] || { label: t.variant, color: 'bg-gray-100 text-gray-700' };
+                      return (
+                        <button
+                          key={t.index}
+                          onClick={() => handleCreateRoom('table', null, t.index)}
+                          disabled={creatingRoom}
+                          className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-indigo-300 transition text-left disabled:opacity-50"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span className="font-semibold text-gray-900">Table {t.index + 1}</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${v.color}`}>{v.label}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2">{t.persona_count} committee members</p>
+                          <div className="flex items-center gap-1.5 text-xs text-indigo-600">
+                            <Mic className="h-3 w-3" />
+                            <span>Open room</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

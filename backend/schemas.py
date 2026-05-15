@@ -106,3 +106,31 @@ class ChatResponse(BaseModel):
     response: str
     sentiment: Optional[str] = None
     timestamp: datetime
+
+
+# ---- Committee Rooms ----
+class RoomCreate(BaseModel):
+    simulation_id: UUID
+    room_type: str = Field(description="'role' to group by title/role, 'table' to group by deliberation table")
+    role_filter: Optional[str] = Field(default=None, description="Role keyword to filter, e.g. 'CTO', 'CEO', 'VP'")
+    table_index: Optional[int] = Field(default=None, description="Table index (0-based) for table-based rooms")
+
+class RoomResponse(BaseModel):
+    id: UUID
+    simulation_id: UUID
+    room_type: str
+    room_name: str
+    role_filter: Optional[str]
+    table_index: Optional[int]
+    participant_count: int
+    participants: List[Dict[str, Any]]
+    created_at: datetime
+
+class RoomMessageOut(BaseModel):
+    type: str = "message"  # message | typing | error | voice
+    persona_id: Optional[str] = None
+    persona_name: Optional[str] = None
+    persona_title: Optional[str] = None
+    content: str = ""
+    audio_base64: Optional[str] = None
+    timestamp: Optional[str] = None
