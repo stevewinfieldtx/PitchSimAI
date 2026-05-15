@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   ArrowLeft, Send, Mic, MicOff, Volume2, VolumeX,
-  Users, Bot, User, Wifi, WifiOff, Circle
+  Users, Bot, User, Wifi, WifiOff, Circle,
+  ChevronDown, ChevronRight, MessageSquare
 } from 'lucide-react';
 
 // ──────────────────────────────────────────────
@@ -135,6 +136,8 @@ export default function CommitteeRoom() {
   const [connected, setConnected] = useState(false);
   const [typingPersonas, setTypingPersonas] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [recapOpen, setRecapOpen] = useState(true);
+  const [expandedPersona, setExpandedPersona] = useState(null);
 
   const wsRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -369,11 +372,81 @@ export default function CommitteeRoom() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {messages.length === 0 && (
+          {/* Deliberation Recap */}
+          {room.debate_quotes?.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden mb-2">
+              <button
+                onClick={() => setRecapOpen(!recapOpen)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-100/50 transition"
+              >
+                {recapOpen ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-amber-600" />}
+                <MessageSquare className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">What they said in deliberation</span>
+                <span className="text-xs text-amber-500 ml-1">({room.debate_quotes.length} participants)</span>
+              </button>
+              {recapOpen && (
+                <div className="px-4 pb-3 space-y-2">
+                  {room.debate_quotes.map((pq, qi) => {
+                    const color = getColor(
+                      room.participants?.find(p => p.name === pq.name)?.id || `quote-${qi}`
+                    );
+                    const isExpanded = expandedPersona === qi;
+                    // Show the initial reaction quote as the preview
+                    const previewQuote = pq.quotes[0];
+                    return (
+                      <div key={qi} className="bg-white/70 rounded-lg border border-amber-100 overflow-hidden">
+                        <button
+                          onClick={() => setExpandedPersona(isExpanded ? null : qi)}
+                          className="w-full flex items-start gap-2.5 p-3 text-left hover:bg-white/90 transition"
+                        >
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${color.bg} ${color.text}`}>
+                            {getInitials(pq.name)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2 mb-0.5">
+                              <span className="text-xs font-semibold text-gray-800">{pq.name}</span>
+                              <span className="text-xs text-gray-400">{pq.title}</span>
+                              {room.room_type === 'role' && (
+                                <span className="text-xs text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">Table {pq.table_index + 1}</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-600 line-clamp-2">{previewQuote?.text}</p>
+                          </div>
+                          {pq.quotes.length > 1 && (
+                            <span className="text-xs text-amber-500 shrink-0 mt-1">
+                              {isExpanded ? '▼' : `+${pq.quotes.length - 1} more`}
+                            </span>
+                          )}
+                        </button>
+                        {isExpanded && pq.quotes.length > 1 && (
+                          <div className="border-t border-amber-100 px-3 pb-3 pt-2 space-y-2">
+                            {pq.quotes.slice(1).map((q, ri) => (
+                              <div key={ri} className="pl-9">
+                                <p className="text-xs font-medium text-amber-700 mb-0.5">{q.round}</p>
+                                <p className="text-xs text-gray-600">{q.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {messages.length === 0 && !room.debate_quotes?.length && (
             <div className="text-center py-12">
               <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-400 text-sm">The room is ready.</p>
               <p className="text-gray-400 text-sm">Start the conversation — ask a question, pitch an idea, or challenge the committee.</p>
+            </div>
+          )}
+
+          {messages.length === 0 && room.debate_quotes?.length > 0 && (
+            <div className="text-center py-4">
+              <p className="text-gray-400 text-sm">Review what they said above, then ask your first question below.</p>
             </div>
           )}
 

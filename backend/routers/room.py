@@ -93,6 +93,62 @@ def _extract_participants_by_table(tables: List[Dict], table_index: int) -> List
     return participants
 
 
+def _extract_debate_quotes(tables: List[Dict], participants: List[Dict], room_type: str, role_filter: str = None, table_index: int = None) -> List[Dict[str, Any]]:
+    """
+    Extract each participant's debate quotes from the original deliberation.
+    Returns a list of {name, title, table_index, table_variant, quotes: [{round, text}]}
+    """
+    participant_names = {p.get("name", "") for p in participants}
+    quotes_by_name: Dict[str, Dict] = {}
+
+    for ti, table in enumerate(tables):
+        # For table-based rooms, only pull from the specific table
+        if room_type == "table" and table_index is not None and ti != table_index:
+            continue
+
+        variant = table.get("variant", f"table_{ti + 1}")
+        for round_data in table.get("rounds", []):
+            round_label = round_data.get("round", "")
+            # Human-readable round names
+            if round_label == "initial_reaction":
+                round_display = "Initial reaction"
+            elif round_label.startswith("debate_"):
+                round_num = round_label.replace("debate_", "")
+                round_display = f"Debate round {round_num}"
+            elif round_label == "cross_table":
+                round_display = "Cross-table discussion"
+            elif round_label == "consensus":
+                round_display = "Final consensus"
+            else:
+                round_display = round_label.replace("_", " ").title()
+
+            for resp in round_data.get("responses", []):
+                name = resp.get("persona", "")
+                if name not in participant_names:
+                    continue
+
+                if name not in quotes_by_name:
+                    quotes_by_name[name] = {
+                        "name": name,
+                        "title": resp.get("title", ""),
+                        "table_index": ti,
+                        "table_variant": variant,
+                        "quotes": [],
+                    }
+
+                text = resp.get("response", "")
+                # Keep quotes manageable — truncate very long ones
+                if len(text) > 400:
+                    text = text[:397] + "..."
+
+                quotes_by_name[name]["quotes"].append({
+                    "round": round_display,
+                    "text": text,
+                })
+
+    return list(quotes_by_name.values())
+
+
 # ──────────────────────────────────────────────
 # REST Endpoints
 # ──────────────────────────────────────────────
@@ -272,6 +328,14 @@ async def get_room(room_id: UUID, db: AsyncSession = Depends(get_db)):
     else:
         participants = _extract_participants_by_table(tables, room.table_index or 0)
 
+    # Extract what each participant said during the original deliberation
+    debate_quotes = _extract_debate_quotes(
+        tables, participants,
+        room_type=room.room_type,
+        role_filter=room.role_filter,
+        table_index=room.table_index,
+    )
+
     return {
         "id": str(room.id),
         "simulation_id": str(room.simulation_id),
@@ -290,6 +354,7 @@ async def get_room(room_id: UUID, db: AsyncSession = Depends(get_db)):
             }
             for p in participants
         ],
+        "debate_quotes": debate_quotes,
         "conversation_history": [
             msg for msg in (room.conversation_history or [])
             if msg.get("role") != "system"

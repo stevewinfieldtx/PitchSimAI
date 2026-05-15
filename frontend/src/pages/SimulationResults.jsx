@@ -67,7 +67,7 @@ function ScoreBar({ label, value, max = 100, inverted = false, icon: Icon }) {
 }
 
 // ─── Committee Table Accordion ───
-function CommitteeAccordion({ table, index }) {
+function CommitteeAccordion({ table, index, onOpenRoom, creatingRoom }) {
   const [open, setOpen] = useState(false);
   const variant = VARIANT_LABELS[table.variant] || { label: table.variant, color: 'bg-gray-100 text-gray-700' };
   const scores = table.scores || {};
@@ -76,19 +76,31 @@ function CommitteeAccordion({ table, index }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between p-4 hover:bg-gray-50 transition">
+        <button onClick={() => setOpen(!open)} className="flex items-center gap-3 flex-1 text-left">
           {open ? <ChevronDown className="h-5 w-5 text-gray-400" /> : <ChevronRight className="h-5 w-5 text-gray-400" />}
           <span className="font-semibold">Table {index + 1}</span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${variant.color}`}>{variant.label}</span>
-        </div>
+        </button>
         <div className="flex items-center gap-4 text-sm">
           <span>Engagement <strong>{scores.engagement ?? '—'}</strong></span>
           <span>Sentiment <strong>{scores.sentiment ?? '—'}</strong></span>
           <span>Deal <strong>{scores.deal_probability ?? '—'}%</strong></span>
           {verdict && <span className={`font-semibold capitalize ${verdictColor}`}>{verdict.replace('_', ' ')}</span>}
+          {onOpenRoom && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenRoom('table', null, index); }}
+              disabled={creatingRoom}
+              className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-50 shrink-0"
+              title="Chat with this table"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <Mic className="h-3.5 w-3.5" />
+              <span>Chat</span>
+            </button>
+          )}
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-gray-100">
@@ -588,9 +600,35 @@ export default function SimulationResults() {
           {/* ─── COMMITTEE DEBATES TAB ─── */}
           {tab === 'debates' && (
             <div className="space-y-4">
+              {/* Role-based room quick-launch bar */}
+              {availableRooms?.roles?.length > 0 && (
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Volume2 className="h-4 w-4 text-indigo-600" />
+                    <span className="text-sm font-semibold text-indigo-900">Chat by Role</span>
+                    <span className="text-xs text-indigo-500">— group the same title across all tables</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableRooms.roles.map((r) => (
+                      <button
+                        key={r.role}
+                        onClick={() => handleCreateRoom('role', r.role)}
+                        disabled={creatingRoom}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition disabled:opacity-50"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <Mic className="h-3.5 w-3.5" />
+                        <span>{r.role}</span>
+                        <span className="text-xs opacity-70">({r.count})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {debateTranscript.length > 0 ? (
                 debateTranscript.map((table, i) => (
-                  <CommitteeAccordion key={i} table={table} index={i} />
+                  <CommitteeAccordion key={i} table={table} index={i} onOpenRoom={handleCreateRoom} creatingRoom={creatingRoom} />
                 ))
               ) : (
                 <div className="text-center py-12 text-gray-400">No debate transcript available</div>
